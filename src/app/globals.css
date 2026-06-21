@@ -1,0 +1,253 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
+  --font-serif: var(--font-serif);
+
+  /* User Custom Design Tokens */
+  --color-ivory: var(--ivory);
+  --color-surface: var(--surface);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-gold: var(--gold);
+  --color-gold-light: var(--gold-light);
+  --color-gold-deep: var(--gold-deep);
+  --color-emerald: var(--emerald);
+  --color-emerald-light: var(--emerald-light);
+  --color-emerald-deep: var(--emerald-deep);
+  --color-ink: var(--ink);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* Pawn to Queen — luxury editorial palette */
+  --ivory: #FAF8F2;
+  --gold: #E6C46A;
+  --gold-light: #F2E4B0;
+  --gold-deep: #B8923F;
+  --emerald: #0E5A3C;
+  --emerald-light: #2D7A56;
+  --emerald-deep: #073A26;
+  --ink: #111111;
+
+  --background: #FAF8F2;
+  --foreground: #111111;
+
+  --surface: #FFFFFF;
+  --text-primary: #111111;
+  --text-secondary: #4A463F;
+  --text-muted: #8A8378;
+  --success: #0E5A3C;
+  --danger: #B7411E;
+
+  --card: #FFFFFF;
+  --card-foreground: #111111;
+  --popover: #FFFFFF;
+  --popover-foreground: #111111;
+  --primary: #0E5A3C;
+  --primary-foreground: #FAF8F2;
+  --secondary: #F2E4B0;
+  --secondary-foreground: #111111;
+  --muted: #EFEAE0;
+  --muted-foreground: #4A463F;
+  --accent: #E6C46A;
+  --accent-foreground: #111111;
+  --destructive: #B7411E;
+  --destructive-foreground: #FAF8F2;
+  --border: #E5DECB;
+  --input: #E5DECB;
+  --ring: #E6C46A;
+
+  --radius: 0.125rem;
+
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-inter);
+  --font-display: var(--font-playfair);
+  --font-serif: var(--font-cormorant);
+
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #111111;
+  --sidebar-primary: #0E5A3C;
+  --sidebar-primary-foreground: #FAF8F2;
+  --sidebar-accent: #F2E4B0;
+  --sidebar-accent-foreground: #111111;
+  --sidebar-border: #E5DECB;
+  --sidebar-ring: #E6C46A;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+  html {
+    @apply font-sans;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+}
+
+/* ─── Landing page utilities ───────────────────────────────── */
+
+.font-serif-quote {
+  font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+}
+
+/* Subtle vintage chessboard texture for hero background */
+.bg-chessboard-faint {
+  background-color: var(--ivory);
+  background-image:
+    linear-gradient(45deg, rgba(17, 17, 17, 0.025) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(17, 17, 17, 0.025) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(17, 17, 17, 0.025) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(17, 17, 17, 0.025) 75%);
+  background-size: 56px 56px;
+  background-position: 0 0, 0 28px, 28px -28px, -28px 0;
+}
+
+/* Aged-paper texture — very subtle noise */
+.bg-paper {
+  background-color: var(--ivory);
+  background-image:
+    radial-gradient(rgba(184, 146, 63, 0.06) 1px, transparent 1px),
+    radial-gradient(rgba(17, 17, 17, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px, 18px 18px;
+  background-position: 0 0, 9px 9px;
+}
+
+/* Hairline gold divider with central ornament */
+.gold-divider {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  color: var(--gold-deep);
+}
+.gold-divider::before,
+.gold-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--gold) 30%,
+    var(--gold) 70%,
+    transparent
+  );
+}
+
+/* Editorial drop-cap utility for the second-brain section */
+.drop-cap::first-letter {
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 700;
+  font-size: 4.25rem;
+  line-height: 0.85;
+  float: left;
+  padding: 0.25rem 0.75rem 0 0;
+  color: var(--emerald);
+}
+
+/* Slow ambient float for accent ornaments */
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.animate-float-slow {
+  animation: floatSlow 7s ease-in-out infinite;
+}
+
+/* ─── Luxury scrollbar — gold track, emerald thumb ─── */
+.scroll-luxury {
+  scrollbar-width: thin;
+  scrollbar-color: var(--emerald) var(--gold-light);
+}
+.scroll-luxury::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.scroll-luxury::-webkit-scrollbar-track {
+  background: var(--gold-light);
+  border-left: 1px solid rgba(184, 146, 63, 0.25);
+}
+.scroll-luxury::-webkit-scrollbar-thumb {
+  background: var(--emerald);
+  border-radius: 8px;
+  border: 2px solid var(--gold-light);
+}
+.scroll-luxury::-webkit-scrollbar-thumb:hover {
+  background: var(--emerald-deep);
+}
+.scroll-luxury::-webkit-scrollbar-corner {
+  background: var(--gold-light);
+}
+
+/* Apply the luxury scrollbar globally on the dashboard */
+body.dashboard-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--emerald) var(--gold-light);
+}
+
+/* Faint gold grid for chart panels */
+.bg-gold-grid {
+  background-color: #FFFFFF;
+  background-image:
+    linear-gradient(rgba(230, 196, 106, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(230, 196, 106, 0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Fade-in for dashboard mount */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease-out both;
+}
