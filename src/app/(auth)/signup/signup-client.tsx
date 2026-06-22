@@ -48,7 +48,7 @@ function OrDivider() {
 export function SignupClient() {
   return (
     <AuthShell>
-      <SignUp.Root>
+      <SignUp.Root routing="virtual">
         {/* ─── START STEP ─── */}
         <SignUp.Step name="start">
           <JournalCard title="Begin Your Journey" eyebrow="Create your account">

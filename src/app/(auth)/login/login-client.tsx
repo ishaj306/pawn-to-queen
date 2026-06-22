@@ -51,7 +51,7 @@ function OrDivider() {
 export function LoginClient() {
   return (
     <AuthShell>
-      <SignIn.Root>
+      <SignIn.Root routing="virtual">
         {/* ─── START STEP — identifier (email) + OAuth ─── */}
         <SignIn.Step name="start">
           <JournalCard title="Sign In To Your Journal" eyebrow="Welcome back">
