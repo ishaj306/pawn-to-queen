@@ -1,32 +1,36 @@
 import { create } from "zustand";
-import { User } from "@supabase/supabase-js";
+import type { ProfileRow } from "@/types/database";
 
-export interface Profile {
-  id: string;
-  user_id: string;
-  username: string | null;
-  full_name: string | null;
-  chess_com_username: string | null;
-  lichess_username: string | null;
-  current_rating: number | null;
-  peak_rating: number | null;
-  country: string | null;
-  avatar_url: string | null;
-  created_at: string;
-  updated_at: string;
+// ─────────────────────────────────────────────────────────────
+//  Client-side auth store.
+//
+//  Clerk owns the user session itself — use `useUser()` from
+//  `@clerk/nextjs` directly when you need the auth-provider's
+//  shape. This store only holds the Postgres profile row that
+//  AuthProvider hydrates on mount, plus a minimal SessionUser
+//  snapshot for components that don't want a Clerk hook.
+// ─────────────────────────────────────────────────────────────
+
+export interface SessionUserShape {
+  id:       string;
+  email:    string | null;
+  fullName: string | null;
+  imageUrl: string | null;
 }
 
 interface AuthState {
-  user: User | null;
-  profile: Profile | null;
-  setUser: (user: User | null) => void;
-  setProfile: (profile: Profile | null) => void;
+  user:       SessionUserShape | null;
+  profile:    ProfileRow | null;
+  setUser:    (user: SessionUserShape | null) => void;
+  setProfile: (profile: ProfileRow | null) => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  profile: null,
-  setUser: (user) => set({ user }),
+  user:       null,
+  profile:    null,
+  setUser:    (user) => set({ user }),
   setProfile: (profile) => set({ profile }),
 }));
-export type { User };
+
+// Back-compat alias for older imports
+export type Profile = ProfileRow;

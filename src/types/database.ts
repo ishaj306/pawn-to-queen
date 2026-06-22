@@ -165,3 +165,28 @@ export type ActivityRow =
   | { kind: "puzzle";   row: PuzzleRow }
   | { kind: "journal";  row: JournalRow }
   | { kind: "study";    row: StudySessionRow };
+
+// ─── Database wrapper — shape Supabase expects from createClient<T> ─────
+// Matches the structure `supabase gen types typescript` outputs. The
+// `[_ in never]: never` pattern is how the generator declares "no rows
+// in this section" — needed because Supabase's GenericSchema constraint
+// requires Views/Functions to exist on the schema.
+
+export type Database = {
+  public: {
+    Tables: {
+      profiles:        { Row: ProfileRow;        Insert: ProfileInsert;        Update: ProfileUpdate;        Relationships: [] };
+      rating_entries:  { Row: RatingEntryRow;    Insert: RatingEntryInsert;    Update: RatingEntryUpdate;    Relationships: [] };
+      games:           { Row: GameRow;           Insert: GameInsert;           Update: GameUpdate;           Relationships: [] };
+      puzzles:         { Row: PuzzleRow;         Insert: PuzzleInsert;         Update: PuzzleUpdate;         Relationships: [] };
+      goals:           { Row: GoalRow;           Insert: GoalInsert;           Update: GoalUpdate;           Relationships: [] };
+      journal:         { Row: JournalRow;        Insert: JournalInsert;        Update: JournalUpdate;        Relationships: [] };
+      study_sessions:  { Row: StudySessionRow;   Insert: StudySessionInsert;   Update: StudySessionUpdate;   Relationships: [] };
+      achievements:    { Row: AchievementRow;    Insert: AchievementInsert;    Update: Partial<AchievementRow>; Relationships: [] };
+    };
+    Views: { [_ in never]: never };
+    Functions: { [_ in never]: never };
+    Enums: { [_ in never]: never };
+    CompositeTypes: { [_ in never]: never };
+  };
+};

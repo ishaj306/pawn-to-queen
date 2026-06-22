@@ -4,8 +4,8 @@ import React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
+import { useClerk } from "@clerk/nextjs";
 import { useAuthStore } from "@/store/authStore";
-import { logout } from "@/features/auth/actions";
 
 // ─────────────────────────────────────────────────────────────
 //  Pawn to Queen — Dashboard Shell
@@ -50,17 +50,13 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { signOut } = useClerk();
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
-  const setUser = useAuthStore((s) => s.setUser);
-  const setProfile = useAuthStore((s) => s.setProfile);
 
   const handleLogout = async () => {
     try {
-      await logout();
-      setUser(null);
-      setProfile(null);
-      router.push("/login");
+      await signOut({ redirectUrl: "/login" });
       router.refresh();
     } catch (err) {
       console.error("Failed to log out", err);
@@ -68,7 +64,7 @@ export default function DashboardLayout({
   };
 
   const displayName =
-    profile?.full_name || user?.email?.split("@")[0] || "Player";
+    profile?.full_name || user?.fullName || user?.email?.split("@")[0] || "Player";
   const avatarLetter = displayName[0]?.toUpperCase() ?? "P";
   const displayRating = profile?.current_rating ?? 800;
 

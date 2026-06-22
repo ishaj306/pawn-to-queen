@@ -1,184 +1,96 @@
 "use server";
 
-import { createClient } from "@/supabase/server";
-import { revalidatePath } from "next/cache";
+import { auth, currentUser } from "@clerk/nextjs/server";
 
-function checkSupabaseConfig() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+import { createAdminClient } from "@/supabase/admin";
+import type { ProfileRow } from "@/types/database";
 
-  const isConfigured = 
-    url && 
-    url !== "" && 
-    !url.includes("your-project-id") &&
-    key && 
-    key !== "" && 
-    !key.includes("...") &&
-    key.length > 50;
+// ─────────────────────────────────────────────────────────────
+//  Auth server actions, Clerk edition.
+//
+//  Clerk owns sign-in, sign-up, OAuth, email verification, MFA
+//  and password resets. Those flows live in the auth pages via
+//  Clerk Elements and never call into here.
+//
+//  This file is now only for things Clerk doesn't do:
+//  - Read the current user + their Postgres profile
+//  - Ensure a profile row exists on first sign-in
+// ─────────────────────────────────────────────────────────────
 
-  return isConfigured;
+export interface SessionUser {
+  user: {
+    id: string;            // Clerk user id, e.g. "user_2AbcXyz"
+    email: string | null;
+    fullName: string | null;
+    imageUrl: string | null;
+  };
+  profile: ProfileRow | null;
 }
 
-export async function login(formData: { email: string; password: string }) {
-  if (!checkSupabaseConfig()) {
-    return { 
-      success: false, 
-      error: "Supabase credentials are not configured. Please fill in NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your .env.local file with your active Supabase values." 
-    };
-  }
-
-  try {
-    const supabase = await createClient();
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: formData.email,
-      password: formData.password,
-    });
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    revalidatePath("/", "layout");
-    return { success: true, user: data.user };
-  } catch (err: any) {
-    console.error("Login error:", err);
-    return { 
-      success: false, 
-      error: "Connection failed. Please check your internet connection or verify that your Supabase credentials in .env.local are valid." 
-    };
-  }
+// Username slug from email, with a small random suffix so collisions
+// don't fail the first insert.
+function makeUsername(email: string | null | undefined): string {
+  const base = (email ?? "player").split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "");
+  const tail = Math.floor(Math.random() * 9000) + 1000;
+  return `${base || "player"}_${tail}`;
 }
 
-export async function signup(formData: {
-  fullName: string;
-  email: string;
-  password: string;
-}) {
-  if (!checkSupabaseConfig()) {
-    return { 
-      success: false, 
-      error: "Supabase credentials are not configured. Please fill in NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your .env.local file with your active Supabase values." 
-    };
+export async function getSessionUser(): Promise<SessionUser | null> {
+  const { userId } = await auth();
+  if (!userId) return null;
+
+  const clerkUser = await currentUser();
+  if (!clerkUser) return null;
+
+  const email = clerkUser.primaryEmailAddress?.emailAddress ?? null;
+  const fullName =
+    [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ").trim() ||
+    null;
+
+  const supabase = createAdminClient();
+
+  // Try to fetch existing profile
+  const { data: existing, error: fetchError } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (fetchError) {
+    console.error("getSessionUser fetch profile error:", fetchError.message);
   }
 
-  try {
-    const supabase = await createClient();
+  let profile = existing as ProfileRow | null;
 
-    const { data, error } = await supabase.auth.signUp({
-      email: formData.email,
-      password: formData.password,
-      options: {
-        data: {
-          full_name: formData.fullName,
-        },
-      },
-    });
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    const user = data.user;
-
-    if (user) {
-      // Create profile entry for the new user.
-      const { error: profileError } = await supabase.from("profiles").insert({
-        user_id: user.id,
-        full_name: formData.fullName,
-        current_rating: 800,
-        peak_rating: 800,
-        username: formData.email.split("@")[0] + "_" + Math.floor(Math.random() * 1000),
-      });
-
-      if (profileError) {
-        console.error("Error creating profile:", profileError.message);
-      }
-    }
-
-    revalidatePath("/", "layout");
-    return { success: true, user };
-  } catch (err: any) {
-    console.error("Signup error:", err);
-    return { 
-      success: false, 
-      error: "Connection failed. Please check your internet connection or verify that your Supabase credentials in .env.local are valid." 
-    };
-  }
-}
-
-export async function forgotPassword(email: string) {
-  if (!checkSupabaseConfig()) {
-    return { 
-      success: false, 
-      error: "Supabase credentials are not configured. Please fill in your .env.local file." 
-    };
-  }
-
-  try {
-    const supabase = await createClient();
-
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/callback`,
-    });
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    return { success: true };
-  } catch (err: any) {
-    console.error("Forgot password error:", err);
-    return { 
-      success: false, 
-      error: "Connection failed. Please check your internet connection or verify your Supabase credentials." 
-    };
-  }
-}
-
-export async function logout() {
-  if (!checkSupabaseConfig()) {
-    return { success: true }; // Allow logout to pass if not configured
-  }
-
-  try {
-    const supabase = await createClient();
-    const { error } = await supabase.auth.signOut();
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    revalidatePath("/", "layout");
-    return { success: true };
-  } catch (err: any) {
-    console.error("Logout error:", err);
-    return { success: true };
-  }
-}
-
-export async function getSessionUser() {
-  if (!checkSupabaseConfig()) {
-    return null;
-  }
-
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) return null;
-
-    const { data: profile } = await supabase
+  // First sign-in — create a default profile row.
+  if (!profile) {
+    const { data: created, error: insertError } = await supabase
       .from("profiles")
-      .select("*")
-      .eq("user_id", user.id)
+      .insert({
+        user_id:        userId,
+        full_name:      fullName,
+        username:       makeUsername(email),
+        current_rating: 800,
+        peak_rating:    800,
+        target_rating:  1500,
+      })
+      .select()
       .single();
 
-    return { user, profile };
-  } catch (err) {
-    console.error("Get session user error:", err);
-    return null;
+    if (insertError) {
+      console.error("getSessionUser create profile error:", insertError.message);
+    } else {
+      profile = created as ProfileRow;
+    }
   }
+
+  return {
+    user: {
+      id:       userId,
+      email,
+      fullName,
+      imageUrl: clerkUser.imageUrl ?? null,
+    },
+    profile,
+  };
 }
