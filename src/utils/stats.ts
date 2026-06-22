@@ -1,16 +1,8 @@
-export interface DbRatingEntry {
-  id: string;
-  user_id: string;
-  rating: number;
-  notes: string;
-  entry_date: string; // YYYY-MM-DD
-  game_result: string | null;
-  mistake_category: string | null;
-  mindset: string | null;
-  takeaway: string | null;
-  is_starred: boolean;
-  created_at: string;
-}
+import type { RatingEntryRow } from "@/types/database";
+
+// Back-compat alias — older callers import { DbRatingEntry }. New code
+// should import RatingEntryRow from @/types/database directly.
+export type DbRatingEntry = RatingEntryRow;
 
 /**
  * Calculates the current consecutive day streak of rating entries.
