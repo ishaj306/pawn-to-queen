@@ -5,12 +5,13 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 //  Replaces the previous Supabase session-refresh middleware.
 // ─────────────────────────────────────────────────────────────
 
-// Routes that require a signed-in user.
-// /games and /puzzles intentionally left OPEN for now — they still use
-// sample seed data. Add them here once Phase 3 wires them to Postgres.
+// Routes that require a signed-in user. /games and /puzzles now read /
+// write Postgres (Phase 3) so they require auth too.
 const isProtected = createRouteMatcher([
   "/dashboard(.*)",
   "/ratings(.*)",
+  "/games(.*)",
+  "/puzzles(.*)",
   "/profile(.*)",
   "/settings(.*)",
   "/goals(.*)",

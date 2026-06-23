@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bar,
@@ -26,8 +26,12 @@ import {
   LogGameModal,
   type GameFormat,
   type GameResult,
-  type LoggedGame,
 } from "@/components/games/log-game-modal";
+import { getGames } from "@/features/games/actions";
+import type { GameRow } from "@/types/database";
+
+// On this page we work with DB rows directly. Alias for readability.
+type LoggedGame = GameRow;
 
 // ─────────────────────────────────────────────────────────────
 //  Pawn to Queen — Games Log + Opening Explorer (Page 5)
@@ -86,114 +90,6 @@ function Fleur({ className = "" }: { className?: string }) {
   );
 }
 
-// ─── Sample seed data ─────────────────────────────────────────
-const SEED_GAMES: LoggedGame[] = [
-  {
-    id: "g1",
-    opponent: "M. Goldberg",
-    date: "2026-06-19",
-    platform: "Chess.com",
-    result: "win",
-    opening: "Italian Game",
-    accuracy: 87,
-    timeControl: "10+0",
-    format: "Rapid",
-    blunders: 1, mistakes: 3, brilliant: 2, missedWins: 0,
-    notes: "Sharp Italian — found the right tactical motif on move 24.",
-  },
-  {
-    id: "g2",
-    opponent: "L. Petrov",
-    date: "2026-06-18",
-    platform: "Chess.com",
-    result: "loss",
-    opening: "Sicilian Defense",
-    accuracy: 74,
-    timeControl: "5+3",
-    format: "Blitz",
-    blunders: 3, mistakes: 5, brilliant: 0, missedWins: 1,
-    notes: "Walked into a Najdorf line I didn't know. Need to drill 6.Bg5.",
-  },
-  {
-    id: "g3",
-    opponent: "A. Karim",
-    date: "2026-06-17",
-    platform: "Lichess",
-    result: "draw",
-    opening: "Queen's Gambit",
-    accuracy: 81,
-    timeControl: "10+0",
-    format: "Rapid",
-    blunders: 1, mistakes: 2, brilliant: 1, missedWins: 1,
-    notes: "Held a tough endgame with opposite-coloured bishops.",
-  },
-  {
-    id: "g4",
-    opponent: "R. Suzuki",
-    date: "2026-06-16",
-    platform: "Chess.com",
-    result: "win",
-    opening: "London System",
-    accuracy: 89,
-    timeControl: "10+0",
-    format: "Rapid",
-    blunders: 0, mistakes: 2, brilliant: 3, missedWins: 0,
-    notes: "Classic London setup, won with a kingside attack.",
-  },
-  {
-    id: "g5",
-    opponent: "K. Smith",
-    date: "2026-06-15",
-    platform: "Chess.com",
-    result: "loss",
-    opening: "French Defense",
-    accuracy: 71,
-    timeControl: "3+2",
-    format: "Blitz",
-    blunders: 4, mistakes: 6, brilliant: 0, missedWins: 0,
-    notes: "Lost the thread in the middlegame. Time trouble.",
-  },
-  {
-    id: "g6",
-    opponent: "T. Mendoza",
-    date: "2026-06-14",
-    platform: "OTB",
-    result: "win",
-    opening: "Caro-Kann",
-    accuracy: 84,
-    timeControl: "30+30",
-    format: "Rapid",
-    blunders: 0, mistakes: 1, brilliant: 1, missedWins: 0,
-    notes: "Solid Caro-Kann. Converted a pawn-up endgame cleanly.",
-  },
-  {
-    id: "g7",
-    opponent: "Y. Park",
-    date: "2026-06-12",
-    platform: "Chess.com",
-    result: "draw",
-    opening: "Italian Game",
-    accuracy: 79,
-    timeControl: "5+3",
-    format: "Blitz",
-    blunders: 1, mistakes: 3, brilliant: 0, missedWins: 1,
-    notes: "Should have pushed in the rook endgame.",
-  },
-  {
-    id: "g8",
-    opponent: "D. Almeida",
-    date: "2026-06-11",
-    platform: "Lichess",
-    result: "win",
-    opening: "Queen's Gambit",
-    accuracy: 92,
-    timeControl: "10+0",
-    format: "Rapid",
-    blunders: 0, mistakes: 1, brilliant: 4, missedWins: 0,
-    notes: "Best game of the month. Brilliant exchange sacrifice on move 19.",
-  },
-];
-
 // ─── Derive opening stats from games ─────────────────────────
 interface OpeningStat {
   name: string;
@@ -214,7 +110,7 @@ function aggregateOpenings(games: LoggedGame[]): OpeningStat[] {
     if (g.result === "win") entry.w++;
     else if (g.result === "loss") entry.l++;
     else entry.d++;
-    entry.acc.push(g.accuracy);
+    if (g.accuracy !== null) entry.acc.push(g.accuracy);
     entry.n++;
     map.set(g.opening, entry);
   }
@@ -242,11 +138,29 @@ type ResultFilter = "All" | "Wins" | "Losses" | "Draws";
 type FormatFilter = "All Formats" | GameFormat;
 
 export default function GamesPage() {
-  const [games, setGames] = useState<LoggedGame[]>(SEED_GAMES);
+  const [games, setGames] = useState<LoggedGame[]>([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [resultFilter, setResultFilter] = useState<ResultFilter>("All");
   const [formatFilter, setFormatFilter] = useState<FormatFilter>("All Formats");
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getGames();
+        if (!cancelled) setGames(rows);
+      } catch (err) {
+        console.error("Failed to load games:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Filtered list for the journal view
   const filtered = useMemo(() => {
@@ -433,7 +347,7 @@ function computeStats(games: LoggedGame[]): Stats {
   const draws = games.filter((g) => g.result === "draw").length;
   const winRate = total ? Math.round((wins / total) * 100) : 0;
   const accuracy = total
-    ? Math.round(games.reduce((a, g) => a + g.accuracy, 0) / total)
+    ? Math.round(games.reduce((a, g) => a + (g.accuracy ?? 0), 0) / total)
     : 0;
   const brilliant = games.reduce((a, g) => a + g.brilliant, 0);
 
@@ -444,7 +358,7 @@ function computeStats(games: LoggedGame[]): Stats {
   const mostPlayed = sorted[0]?.[0] ?? "—";
 
   // Longest win streak — newest first in the list, so iterate in chronological order
-  const chrono = [...games].sort((a, b) => a.date.localeCompare(b.date));
+  const chrono = [...games].sort((a, b) => a.played_at.localeCompare(b.played_at));
   let cur = 0;
   let max = 0;
   for (const g of chrono) {
@@ -710,7 +624,7 @@ function GameCard({ game }: { game: LoggedGame }) {
   const [open, setOpen] = useState(false);
   const tone = RESULT_TONES[game.result];
 
-  const dateLabel = new Date(game.date + "T00:00:00").toLocaleDateString(
+  const dateLabel = new Date(game.played_at + "T00:00:00").toLocaleDateString(
     "en-US",
     { month: "short", day: "numeric", year: "numeric" },
   );
@@ -738,7 +652,7 @@ function GameCard({ game }: { game: LoggedGame }) {
                 {dateLabel}
               </span>
               <span className="text-[10px] tracking-[0.22em] uppercase text-ink/45 px-2 py-0.5 bg-ivory border border-gold/30 rounded-sm">
-                {game.format} · {game.timeControl}
+                {game.format} · {game.time_control}
               </span>
               <span className="text-[10px] tracking-[0.22em] uppercase text-ink/45">
                 {game.platform}
@@ -752,7 +666,7 @@ function GameCard({ game }: { game: LoggedGame }) {
               {" · "}
               Accuracy{" "}
               <span className={`font-display text-base ${tone.text}`}>
-                {game.accuracy}
+                {game.accuracy ?? "—"}
               </span>
               %
             </p>
@@ -801,11 +715,11 @@ function GameCard({ game }: { game: LoggedGame }) {
 
               <div className="relative grid md:grid-cols-2 gap-7">
                 <div className="space-y-3.5">
-                  <BarLine label="Accuracy" value={game.accuracy} max={100} tone="emerald" suffix="%" />
+                  <BarLine label="Accuracy" value={game.accuracy ?? 0} max={100} tone="emerald" suffix="%" />
                   <BarLine label="Brilliant Moves" value={game.brilliant} max={5} tone="gold" />
                   <BarLine label="Blunders" value={game.blunders} max={5} tone="loss" />
                   <BarLine label="Mistakes" value={game.mistakes} max={6} tone="muted" />
-                  <BarLine label="Missed Wins" value={game.missedWins} max={3} tone="loss" />
+                  <BarLine label="Missed Wins" value={game.missed_wins} max={3} tone="loss" />
                 </div>
                 <div className="space-y-3">
                   <p className="text-[10px] tracking-[0.24em] uppercase text-gold-deep">
@@ -1330,7 +1244,7 @@ function InsightsSection({
   }, [games]);
 
   const highestAccuracy = useMemo(() => {
-    return [...games].sort((a, b) => b.accuracy - a.accuracy)[0];
+    return [...games].sort((a, b) => (b.accuracy ?? 0) - (a.accuracy ?? 0))[0];
   }, [games]);
 
   const biggestBlunderGame = useMemo(() => {
@@ -1339,7 +1253,10 @@ function InsightsSection({
 
   const favoriteTC = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const g of games) counts.set(g.timeControl, (counts.get(g.timeControl) ?? 0) + 1);
+    for (const g of games) {
+    const tc = g.time_control ?? "—";
+    counts.set(tc, (counts.get(tc) ?? 0) + 1);
+  }
     return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
   }, [games]);
 
@@ -1358,7 +1275,7 @@ function InsightsSection({
     },
     {
       title: "Highest Accuracy Game",
-      label: highestAccuracy ? `${highestAccuracy.accuracy}%` : "—",
+      label: highestAccuracy?.accuracy !== undefined && highestAccuracy?.accuracy !== null ? `${highestAccuracy.accuracy}%` : "—",
       sub: highestAccuracy ? `vs. ${highestAccuracy.opponent}` : "Need games",
       piece: PIECES.bishop,
     },

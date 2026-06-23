@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -14,10 +14,34 @@ import {
 } from "recharts";
 import { ArrowDownRight, ArrowUpRight, Flame, Minus, Plus } from "lucide-react";
 
-import {
-  LogPuzzlesModal,
-  type PuzzleSession,
-} from "@/components/puzzles/log-puzzles-modal";
+import { LogPuzzlesModal } from "@/components/puzzles/log-puzzles-modal";
+import { getPuzzles } from "@/features/puzzles/actions";
+import type { PuzzleRow } from "@/types/database";
+
+// Local view-model. The page existed before the DB schema; this keeps
+// its existing field names (date, rating, ...) and maps from PuzzleRow
+// once on fetch / once on insert, so no widespread renames are needed.
+export interface PuzzleSession {
+  id: string;
+  date: string;
+  count: number;
+  accuracy: number;
+  minutes: number;
+  rating: number;
+  notes: string;
+}
+
+function fromRow(row: PuzzleRow): PuzzleSession {
+  return {
+    id:       row.id,
+    date:     row.session_date,
+    count:    row.count,
+    accuracy: row.accuracy ?? 0,
+    minutes:  row.minutes ?? 0,
+    rating:   row.puzzle_rating ?? 1100,
+    notes:    row.notes ?? "",
+  };
+}
 
 // ─────────────────────────────────────────────────────────────
 //  Pawn to Queen — Puzzle Tracker + Heatmap (Page 6)
@@ -123,8 +147,26 @@ function seedSessions(): PuzzleSession[] {
 // ─────────────────────────────────────────────────────────────
 
 export default function PuzzlesPage() {
-  const [sessions, setSessions] = useState<PuzzleSession[]>(() => seedSessions());
+  const [sessions, setSessions] = useState<PuzzleSession[]>([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getPuzzles();
+        if (!cancelled) setSessions(rows.map(fromRow));
+      } catch (err) {
+        console.error("Failed to load puzzle sessions:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const sorted = useMemo(
     () => [...sessions].sort((a, b) => a.date.localeCompare(b.date)),
@@ -217,7 +259,7 @@ export default function PuzzlesPage() {
         open={modalOpen}
         onOpenChange={setModalOpen}
         defaultRating={stats.currentRating}
-        onSaved={(s) => setSessions((prev) => [s, ...prev])}
+        onSaved={(row) => setSessions((prev) => [fromRow(row), ...prev])}
       />
     </div>
   );

@@ -4,23 +4,16 @@ import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+
+import { createPuzzle } from "@/features/puzzles/actions";
+import type { PuzzleRow } from "@/types/database";
 
 // ─────────────────────────────────────────────────────────────
 //  Log Puzzles modal — luxury habit-journal style
-//  Adds a puzzle session to local state (no DB schema yet).
+//  Posts to /features/puzzles/actions and returns the inserted row.
 // ─────────────────────────────────────────────────────────────
-
-export interface PuzzleSession {
-  id: string;
-  date: string;       // YYYY-MM-DD
-  count: number;
-  accuracy: number;   // 0-100
-  minutes: number;
-  rating: number;     // puzzle rating after session
-  notes: string;
-}
 
 const todayISO = () => {
   const d = new Date();
@@ -48,9 +41,10 @@ export function LogPuzzlesModal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultRating?: number;
-  onSaved: (s: PuzzleSession) => void;
+  onSaved: (s: PuzzleRow) => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const {
     register,
@@ -69,28 +63,38 @@ export function LogPuzzlesModal({
     },
   });
 
-  const onSubmit = (values: FormValues) => {
+  const onSubmit = async (values: FormValues) => {
     setSubmitting(true);
-    const session: PuzzleSession = {
-      id: `p-${Date.now()}`,
-      date: values.date,
-      count: values.count,
-      accuracy: values.accuracy,
-      minutes: values.minutes,
-      rating: values.rating,
-      notes: values.notes ?? "",
-    };
-    onSaved(session);
-    reset({
-      date: todayISO(),
-      count: 10,
-      accuracy: 80,
-      minutes: 15,
-      rating: values.rating,
-      notes: "",
-    });
-    setSubmitting(false);
-    onOpenChange(false);
+    setErrorMsg(null);
+    try {
+      const res = await createPuzzle({
+        session_date:  values.date,
+        count:         values.count,
+        accuracy:      values.accuracy,
+        minutes:       values.minutes,
+        puzzle_rating: values.rating,
+        notes:         values.notes ?? null,
+      });
+      if (res.success && res.data) {
+        onSaved(res.data);
+        reset({
+          date: todayISO(),
+          count: 10,
+          accuracy: 80,
+          minutes: 15,
+          rating: values.rating,
+          notes: "",
+        });
+        onOpenChange(false);
+      } else {
+        setErrorMsg(res.error ?? "Could not save the session.");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unexpected error.";
+      setErrorMsg(msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -134,6 +138,11 @@ export function LogPuzzlesModal({
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+              {errorMsg && (
+                <div className="bg-destructive/8 border border-destructive/25 px-4 py-3 text-[13px] text-destructive font-sans rounded-sm">
+                  {errorMsg}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <Field
                   id="date"
@@ -206,6 +215,7 @@ export function LogPuzzlesModal({
                   disabled={submitting}
                   className="group flex-1 inline-flex items-center justify-center gap-2.5 bg-emerald text-ivory px-6 py-3 text-[12px] tracking-[0.26em] uppercase hover:bg-emerald-deep disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                 >
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                   Save Session
                   <span
                     className="text-gold transition-transform group-hover:translate-x-0.5"

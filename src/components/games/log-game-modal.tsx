@@ -4,34 +4,22 @@ import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+
+import { createGame } from "@/features/games/actions";
+import type { GameRow } from "@/types/database";
 
 // ─────────────────────────────────────────────────────────────
 //  Log Game modal — luxury grandmaster's-notebook style
-//  Adds a game to local state (no DB schema yet).
+//  Posts to /features/games/actions and returns the inserted row.
 // ─────────────────────────────────────────────────────────────
 
+// DB enum shapes — keep narrow so Zod can enforce them.
 export type GameResult = "win" | "loss" | "draw";
+// Rapid/Blitz/Bullet/Daily — the DB allows Daily too via RatingFormat
 export type GameFormat = "Rapid" | "Blitz" | "Bullet";
 export type GamePlatform = "Chess.com" | "Lichess" | "OTB";
-
-export interface LoggedGame {
-  id: string;
-  opponent: string;
-  date: string;
-  platform: GamePlatform;
-  result: GameResult;
-  opening: string;
-  accuracy: number;
-  timeControl: string;
-  format: GameFormat;
-  blunders: number;
-  mistakes: number;
-  brilliant: number;
-  missedWins: number;
-  notes: string;
-}
 
 const RESULTS: GameResult[] = ["win", "loss", "draw"];
 const FORMATS: GameFormat[] = ["Rapid", "Blitz", "Bullet"];
@@ -84,9 +72,10 @@ export function LogGameModal({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSaved: (g: LoggedGame) => void;
+  onSaved: (g: GameRow) => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const {
     register,
@@ -118,28 +107,38 @@ export function LogGameModal({
   const format = watch("format");
   const platform = watch("platform");
 
-  const onSubmit = (values: FormValues) => {
+  const onSubmit = async (values: FormValues) => {
     setSubmitting(true);
-    const game: LoggedGame = {
-      id: `g-${Date.now()}`,
-      opponent: values.opponent,
-      date: values.date,
-      platform: values.platform,
-      result: values.result,
-      opening: values.opening,
-      accuracy: values.accuracy,
-      timeControl: values.timeControl,
-      format: values.format,
-      blunders: values.blunders,
-      mistakes: values.mistakes,
-      brilliant: values.brilliant,
-      missedWins: values.missedWins,
-      notes: values.notes ?? "",
-    };
-    onSaved(game);
-    reset();
-    setSubmitting(false);
-    onOpenChange(false);
+    setErrorMsg(null);
+    try {
+      const res = await createGame({
+        opponent:     values.opponent,
+        played_at:    values.date,
+        platform:     values.platform,
+        result:       values.result,
+        opening:      values.opening,
+        format:       values.format,
+        accuracy:     values.accuracy,
+        time_control: values.timeControl,
+        blunders:     values.blunders,
+        mistakes:     values.mistakes,
+        brilliant:    values.brilliant,
+        missed_wins:  values.missedWins,
+        notes:        values.notes ?? null,
+      });
+      if (res.success && res.data) {
+        onSaved(res.data);
+        reset();
+        onOpenChange(false);
+      } else {
+        setErrorMsg(res.error ?? "Could not save the game.");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unexpected error.";
+      setErrorMsg(msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -183,6 +182,11 @@ export function LogGameModal({
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              {errorMsg && (
+                <div className="bg-destructive/8 border border-destructive/25 px-4 py-3 text-[13px] text-destructive font-sans rounded-sm">
+                  {errorMsg}
+                </div>
+              )}
               {/* Result + Format + Platform — segmented controls */}
               <div className="space-y-4">
                 <Segmented
@@ -315,6 +319,7 @@ export function LogGameModal({
                   disabled={submitting}
                   className="group flex-1 inline-flex items-center justify-center gap-2.5 bg-emerald text-ivory px-6 py-3 text-[12px] tracking-[0.26em] uppercase hover:bg-emerald-deep disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                 >
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                   Save Game
                   <span
                     className="text-gold transition-transform group-hover:translate-x-0.5"
