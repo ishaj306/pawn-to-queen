@@ -27,10 +27,49 @@ const inter = Inter({
   display: "swap",
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
 export const metadata: Metadata = {
-  title: "Pawn to Queen — Every Master Was Once A Pawn",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default:  "Pawn to Queen — Every Master Was Once A Pawn",
+    template: "%s · Pawn to Queen",
+  },
   description:
     "The personal operating system for chess improvement. Track ratings, games, puzzles, habits and insights — transform scattered practice into structured growth.",
+  keywords: [
+    "chess", "chess improvement", "chess tracker", "rating tracker",
+    "chess journal", "chess habits", "chess analytics", "chess.com",
+    "lichess", "chess goals", "chess training",
+  ],
+  authors: [{ name: "Isha" }],
+  creator: "Isha",
+  openGraph: {
+    type: "website",
+    url: SITE_URL,
+    siteName: "Pawn to Queen",
+    title: "Pawn to Queen — Every Master Was Once A Pawn",
+    description:
+      "Track ratings, games, puzzles, habits and insights. A luxury chess journal for ambitious players.",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Pawn to Queen — Every Master Was Once A Pawn",
+    description:
+      "Track ratings, games, puzzles, habits and insights. A luxury chess journal for ambitious players.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large" },
+  },
+  alternates: {
+    canonical: "/",
+  },
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 // Theme the Clerk-hosted UI bits (UserButton, etc.) to match our luxury
