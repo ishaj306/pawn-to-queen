@@ -28,19 +28,20 @@ interface NavItem {
   ready?: boolean;
 }
 
-// 11 chapters of the journal, per the dashboard spec.
+// 12 chapters of the journal, per the dashboard spec. All routes wired.
 const NAV: NavItem[] = [
-  { name: "Dashboard",      href: "/dashboard", piece: PIECES.queen,  ready: true },
-  { name: "Rating Tracker", href: "/ratings",   piece: PIECES.king,   ready: true },
-  { name: "Games Log",      href: "/games",     piece: PIECES.rook,   ready: true },
-  { name: "Puzzle Tracker", href: "/puzzles",   piece: PIECES.bishop, ready: true },
-  { name: "Goals",          href: "/goals",     piece: PIECES.knight },
-  { name: "Study Planner",  href: "/study",     piece: PIECES.pawn },
-  { name: "Journal",        href: "/journal",   piece: PIECES.bishop },
-  { name: "Achievements",   href: "/achievements", piece: PIECES.queen },
-  { name: "Statistics",     href: "/stats",     piece: PIECES.knight },
-  { name: "Profile",        href: "/profile",   piece: PIECES.king,   ready: true },
-  { name: "Settings",       href: "/settings",  piece: PIECES.pawn,   ready: true },
+  { name: "Dashboard",      href: "/dashboard",    piece: PIECES.queen,  ready: true },
+  { name: "Rating Tracker", href: "/ratings",      piece: PIECES.king,   ready: true },
+  { name: "Games Log",      href: "/games",        piece: PIECES.rook,   ready: true },
+  { name: "Puzzle Tracker", href: "/puzzles",      piece: PIECES.bishop, ready: true },
+  { name: "Goals",          href: "/goals",        piece: PIECES.knight, ready: true },
+  { name: "Study Planner",  href: "/study",        piece: PIECES.pawn,   ready: true },
+  { name: "Journal",        href: "/journal",      piece: PIECES.bishop, ready: true },
+  { name: "Achievements",   href: "/achievements", piece: PIECES.queen,  ready: true },
+  { name: "Statistics",     href: "/stats",        piece: PIECES.knight, ready: true },
+  { name: "Calendar",       href: "/calendar",     piece: PIECES.rook,   ready: true },
+  { name: "Profile",        href: "/profile",      piece: PIECES.king,   ready: true },
+  { name: "Settings",       href: "/settings",     piece: PIECES.pawn,   ready: true },
 ];
 
 export default function DashboardLayout({
