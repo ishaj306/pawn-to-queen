@@ -1,9 +1,10 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache, updateTag } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
+import { userTag } from "@/lib/cache-tags";
 import type { JournalRow, JournalKind, JournalMood } from "@/types/database";
 
 // ─────────────────────────────────────────────────────────────
@@ -38,6 +39,7 @@ export async function createJournalEntry(input: CreateJournalInput) {
       .single();
     if (error) return { success: false as const, error: error.message };
 
+    updateTag(userTag(userId, "journal"));
     revalidatePath("/", "layout");
     return { success: true as const, data: data as unknown as JournalRow };
   } catch (err) {
@@ -50,19 +52,25 @@ export async function getJournalEntries(): Promise<JournalRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("journal")
-    .select("*")
-    .eq("user_id", userId)
-    .order("entry_date", { ascending: false })
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("getJournalEntries error:", error.message);
-    return [];
-  }
-  return (data ?? []) as unknown as JournalRow[];
+  const fetcher = unstable_cache(
+    async (uid: string) => {
+      const supabase = createAdminClient();
+      const { data, error } = await supabase
+        .from("journal")
+        .select("*")
+        .eq("user_id", uid)
+        .order("entry_date", { ascending: false })
+        .order("created_at", { ascending: false });
+      if (error) {
+        console.error("getJournalEntries error:", error.message);
+        return [];
+      }
+      return (data ?? []) as unknown as JournalRow[];
+    },
+    ["journal", userId],
+    { tags: [userTag(userId, "journal")], revalidate: 60 },
+  );
+  return fetcher(userId);
 }
 
 export async function deleteJournalEntry(id: string) {
@@ -77,6 +85,7 @@ export async function deleteJournalEntry(id: string) {
     .eq("user_id", userId);
   if (error) return { success: false as const, error: error.message };
 
+  updateTag(userTag(userId, "journal"));
   revalidatePath("/", "layout");
   return { success: true as const };
 }

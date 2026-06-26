@@ -1,9 +1,11 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache, updateTag } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
+import { userTag } from "@/lib/cache-tags";
+import { recomputeGoals } from "@/features/goals/actions";
 import type { PuzzleRow } from "@/types/database";
 
 // ─────────────────────────────────────────────────────────────
@@ -41,6 +43,8 @@ export async function createPuzzle(input: CreatePuzzleInput) {
 
     if (error) return { success: false as const, error: error.message };
 
+    updateTag(userTag(userId, "puzzles"));
+    recomputeGoals().catch((e) => console.error("recomputeGoals (puzzle):", e));
     revalidatePath("/", "layout");
     return { success: true as const, data: data as unknown as PuzzleRow };
   } catch (err) {
@@ -53,24 +57,30 @@ export async function getPuzzles(): Promise<PuzzleRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
-  try {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
-      .from("puzzles")
-      .select("*")
-      .eq("user_id", userId)
-      .order("session_date", { ascending: false })
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("getPuzzles error:", error.message);
-      return [];
-    }
-    return (data ?? []) as unknown as PuzzleRow[];
-  } catch (err) {
-    console.error("getPuzzles exception:", err);
-    return [];
-  }
+  const fetcher = unstable_cache(
+    async (uid: string) => {
+      try {
+        const supabase = createAdminClient();
+        const { data, error } = await supabase
+          .from("puzzles")
+          .select("*")
+          .eq("user_id", uid)
+          .order("session_date", { ascending: false })
+          .order("created_at", { ascending: false });
+        if (error) {
+          console.error("getPuzzles error:", error.message);
+          return [];
+        }
+        return (data ?? []) as unknown as PuzzleRow[];
+      } catch (err) {
+        console.error("getPuzzles exception:", err);
+        return [];
+      }
+    },
+    ["puzzles", userId],
+    { tags: [userTag(userId, "puzzles")], revalidate: 60 },
+  );
+  return fetcher(userId);
 }
 
 export async function deletePuzzle(id: string) {
@@ -87,6 +97,7 @@ export async function deletePuzzle(id: string) {
 
     if (error) return { success: false as const, error: error.message };
 
+    updateTag(userTag(userId, "puzzles"));
     revalidatePath("/", "layout");
     return { success: true as const };
   } catch (err) {

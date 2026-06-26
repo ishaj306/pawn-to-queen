@@ -1,9 +1,10 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache, updateTag } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
+import { userTag } from "@/lib/cache-tags";
 import type { AchievementRow } from "@/types/database";
 
 // ─────────────────────────────────────────────────────────────
@@ -18,18 +19,24 @@ export async function getAchievements(): Promise<AchievementRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("achievements")
-    .select("*")
-    .eq("user_id", userId)
-    .order("unlocked_at", { ascending: false });
-
-  if (error) {
-    console.error("getAchievements error:", error.message);
-    return [];
-  }
-  return (data ?? []) as unknown as AchievementRow[];
+  const fetcher = unstable_cache(
+    async (uid: string) => {
+      const supabase = createAdminClient();
+      const { data, error } = await supabase
+        .from("achievements")
+        .select("*")
+        .eq("user_id", uid)
+        .order("unlocked_at", { ascending: false });
+      if (error) {
+        console.error("getAchievements error:", error.message);
+        return [];
+      }
+      return (data ?? []) as unknown as AchievementRow[];
+    },
+    ["achievements", userId],
+    { tags: [userTag(userId, "achievements")], revalidate: 60 },
+  );
+  return fetcher(userId);
 }
 
 export async function unlockAchievement(key: string) {
@@ -46,6 +53,7 @@ export async function unlockAchievement(key: string) {
     return { success: false as const, error: error.message };
   }
 
+  updateTag(userTag(userId, "achievements"));
   revalidatePath("/", "layout");
   return { success: true as const };
 }

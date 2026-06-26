@@ -1,9 +1,10 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache, updateTag } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
+import { userTag } from "@/lib/cache-tags";
 import type { ProfileRow } from "@/types/database";
 
 // ─────────────────────────────────────────────────────────────
@@ -24,13 +25,21 @@ export interface UpdateProfileInput {
 export async function getProfile(): Promise<ProfileRow | null> {
   const { userId } = await auth();
   if (!userId) return null;
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
-  return (data ?? null) as ProfileRow | null;
+
+  const fetcher = unstable_cache(
+    async (uid: string) => {
+      const supabase = createAdminClient();
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_id", uid)
+        .maybeSingle();
+      return (data ?? null) as ProfileRow | null;
+    },
+    ["profile", userId],
+    { tags: [userTag(userId, "profile")], revalidate: 60 },
+  );
+  return fetcher(userId);
 }
 
 export async function updateProfile(input: UpdateProfileInput) {
@@ -48,6 +57,7 @@ export async function updateProfile(input: UpdateProfileInput) {
 
     if (error) return { success: false as const, error: error.message };
 
+    updateTag(userTag(userId, "profile"));
     revalidatePath("/", "layout");
     return { success: true as const, data: data as unknown as ProfileRow };
   } catch (err) {

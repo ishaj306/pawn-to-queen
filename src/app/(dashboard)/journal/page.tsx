@@ -9,6 +9,7 @@ import {
   deleteJournalEntry,
   getJournalEntries,
 } from "@/features/journal/actions";
+import { LoadMore } from "@/components/shared/load-more";
 import type { JournalKind, JournalRow } from "@/types/database";
 
 const PIECES = {
@@ -34,6 +35,7 @@ export default function JournalPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | JournalKind>("all");
   const [search, setSearch] = useState("");
+  const [visible, setVisible] = useState(20);
 
   const refresh = async () => {
     const rows = await getJournalEntries();
@@ -175,9 +177,10 @@ export default function JournalPage() {
             <EmptyJournal onAdd={() => setModalOpen(true)} />
           </FadeUp>
         ) : (
+          <div>
           <ul className="space-y-4">
             <AnimatePresence initial={false}>
-              {filtered.map((e, i) => (
+              {filtered.slice(0, visible).map((e, i) => (
                 <motion.li
                   key={e.id}
                   initial={{ opacity: 0, y: 10 }}
@@ -190,6 +193,15 @@ export default function JournalPage() {
               ))}
             </AnimatePresence>
           </ul>
+          <div className="mt-5">
+            <LoadMore
+              visible={Math.min(visible, filtered.length)}
+              total={filtered.length}
+              step={20}
+              onMore={() => setVisible((v) => v + 20)}
+            />
+          </div>
+          </div>
         )}
       </div>
 

@@ -28,6 +28,7 @@ import {
   type GameResult,
 } from "@/components/games/log-game-modal";
 import { getGames } from "@/features/games/actions";
+import { LoadMore } from "@/components/shared/load-more";
 import type { GameRow } from "@/types/database";
 
 // On this page we work with DB rows directly. Alias for readability.
@@ -144,6 +145,9 @@ export default function GamesPage() {
   const [resultFilter, setResultFilter] = useState<ResultFilter>("All");
   const [formatFilter, setFormatFilter] = useState<FormatFilter>("All Formats");
   const [search, setSearch] = useState("");
+  // List virtualization — render only the first N rows. Aggregations
+  // (stats, openings) still iterate the full set.
+  const [visible, setVisible] = useState(20);
 
   useEffect(() => {
     let cancelled = false;
@@ -231,9 +235,11 @@ export default function GamesPage() {
 
         <FadeUp delay={0.05}>
           <GameHistoryList
-            games={filtered}
+            games={filtered.slice(0, visible)}
             totalCount={games.length}
+            filteredCount={filtered.length}
             onAdd={() => setModalOpen(true)}
+            onMore={() => setVisible((v) => v + 20)}
           />
         </FadeUp>
 
@@ -546,11 +552,15 @@ const RESULT_TONES = {
 function GameHistoryList({
   games,
   totalCount,
+  filteredCount,
   onAdd,
+  onMore,
 }: {
   games: LoggedGame[];
   totalCount: number;
+  filteredCount: number;
   onAdd: () => void;
+  onMore: () => void;
 }) {
   if (games.length === 0) {
     return (
@@ -616,6 +626,9 @@ function GameHistoryList({
           ))}
         </AnimatePresence>
       </ul>
+      <div className="mt-4">
+        <LoadMore visible={games.length} total={filteredCount} step={20} onMore={onMore} />
+      </div>
     </section>
   );
 }

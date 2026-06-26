@@ -58,9 +58,14 @@ export default function AchievementsPage() {
         setStatuses(evals);
         setPersisted(existing);
 
-        // Persist any newly-earned ones (idempotent).
-        const earnedKeys = evals.filter((e) => e.unlocked).map((e) => e.badge.key);
-        if (earnedKeys.length > 0) await unlockMany(earnedKeys);
+        // Only persist NEW unlocks — skip the write entirely if every earned
+        // badge is already in the achievements table. Avoids a useless
+        // INSERT round-trip on every page visit.
+        const persistedKeys = new Set(existing.map((p) => p.key));
+        const newlyEarned = evals
+          .filter((e) => e.unlocked && !persistedKeys.has(e.badge.key))
+          .map((e) => e.badge.key);
+        if (newlyEarned.length > 0) await unlockMany(newlyEarned);
       } finally {
         if (!cancelled) setLoading(false);
       }

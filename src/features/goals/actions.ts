@@ -1,9 +1,10 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache, updateTag } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
+import { userTag } from "@/lib/cache-tags";
 import type { GoalRow, GoalMetric } from "@/types/database";
 
 // ─────────────────────────────────────────────────────────────
@@ -39,6 +40,7 @@ export async function createGoal(input: CreateGoalInput) {
       .single();
     if (error) return { success: false as const, error: error.message };
 
+    updateTag(userTag(userId, "goals"));
     revalidatePath("/", "layout");
     return { success: true as const, data: data as unknown as GoalRow };
   } catch (err) {
@@ -51,19 +53,25 @@ export async function getGoals(): Promise<GoalRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("goals")
-    .select("*")
-    .eq("user_id", userId)
-    .order("completed_at", { ascending: true, nullsFirst: true })
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("getGoals error:", error.message);
-    return [];
-  }
-  return (data ?? []) as unknown as GoalRow[];
+  const fetcher = unstable_cache(
+    async (uid: string) => {
+      const supabase = createAdminClient();
+      const { data, error } = await supabase
+        .from("goals")
+        .select("*")
+        .eq("user_id", uid)
+        .order("completed_at", { ascending: true, nullsFirst: true })
+        .order("created_at", { ascending: false });
+      if (error) {
+        console.error("getGoals error:", error.message);
+        return [];
+      }
+      return (data ?? []) as unknown as GoalRow[];
+    },
+    ["goals", userId],
+    { tags: [userTag(userId, "goals")], revalidate: 60 },
+  );
+  return fetcher(userId);
 }
 
 export async function updateGoalProgress(id: string, current_value: number) {
@@ -93,6 +101,7 @@ export async function updateGoalProgress(id: string, current_value: number) {
 
   if (error) return { success: false as const, error: error.message };
 
+  updateTag(userTag(userId, "goals"));
   revalidatePath("/", "layout");
   return { success: true as const };
 }
@@ -109,6 +118,7 @@ export async function deleteGoal(id: string) {
     .eq("user_id", userId);
   if (error) return { success: false as const, error: error.message };
 
+  updateTag(userTag(userId, "goals"));
   revalidatePath("/", "layout");
   return { success: true as const };
 }
@@ -192,6 +202,9 @@ export async function recomputeGoals() {
     }
   }
 
-  if (updated > 0) revalidatePath("/", "layout");
+  if (updated > 0) {
+    updateTag(userTag(userId, "goals"));
+    revalidatePath("/", "layout");
+  }
   return { success: true as const, updated };
 }

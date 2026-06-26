@@ -1,9 +1,11 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache, updateTag } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
+import { userTag } from "@/lib/cache-tags";
+import { recomputeGoals } from "@/features/goals/actions";
 import type {
   GameRow,
   GamePlatform,
@@ -60,6 +62,8 @@ export async function createGame(input: CreateGameInput) {
 
     if (error) return { success: false as const, error: error.message };
 
+    updateTag(userTag(userId, "games"));
+    recomputeGoals().catch((e) => console.error("recomputeGoals (game):", e));
     revalidatePath("/", "layout");
     return { success: true as const, data: data as unknown as GameRow };
   } catch (err) {
@@ -72,24 +76,30 @@ export async function getGames(): Promise<GameRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
-  try {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
-      .from("games")
-      .select("*")
-      .eq("user_id", userId)
-      .order("played_at", { ascending: false })
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("getGames error:", error.message);
-      return [];
-    }
-    return (data ?? []) as unknown as GameRow[];
-  } catch (err) {
-    console.error("getGames exception:", err);
-    return [];
-  }
+  const fetcher = unstable_cache(
+    async (uid: string) => {
+      try {
+        const supabase = createAdminClient();
+        const { data, error } = await supabase
+          .from("games")
+          .select("*")
+          .eq("user_id", uid)
+          .order("played_at", { ascending: false })
+          .order("created_at", { ascending: false });
+        if (error) {
+          console.error("getGames error:", error.message);
+          return [];
+        }
+        return (data ?? []) as unknown as GameRow[];
+      } catch (err) {
+        console.error("getGames exception:", err);
+        return [];
+      }
+    },
+    ["games", userId],
+    { tags: [userTag(userId, "games")], revalidate: 60 },
+  );
+  return fetcher(userId);
 }
 
 export async function deleteGame(id: string) {
@@ -106,6 +116,7 @@ export async function deleteGame(id: string) {
 
     if (error) return { success: false as const, error: error.message };
 
+    updateTag(userTag(userId, "games"));
     revalidatePath("/", "layout");
     return { success: true as const };
   } catch (err) {

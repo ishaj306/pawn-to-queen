@@ -5,11 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Plus, Trash2 } from "lucide-react";
 
 import { NewGoalModal } from "@/components/goals/new-goal-modal";
-import {
-  deleteGoal,
-  getGoals,
-  recomputeGoals,
-} from "@/features/goals/actions";
+import { deleteGoal, getGoals } from "@/features/goals/actions";
 import type { GoalMetric, GoalRow } from "@/types/database";
 
 const PIECES = {
@@ -38,10 +34,11 @@ export default function GoalsPage() {
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
+    // Note: goals progress is updated by write hooks in create-rating /
+    // create-game / create-puzzle / create-study actions. We just read.
     let cancelled = false;
     (async () => {
       try {
-        await recomputeGoals();
         const rows = await getGoals();
         if (!cancelled) setGoals(rows);
       } finally {

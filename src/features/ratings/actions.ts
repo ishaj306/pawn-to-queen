@@ -1,9 +1,11 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache, updateTag } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
+import { userTag } from "@/lib/cache-tags";
+import { recomputeGoals } from "@/features/goals/actions";
 import type { RatingFormat } from "@/types/database";
 
 // ─────────────────────────────────────────────────────────────
@@ -79,6 +81,10 @@ export async function createRatingEntry(input: RatingEntryInput) {
       })
       .eq("user_id", userId);
 
+    updateTag(userTag(userId, "ratings"));
+    updateTag(userTag(userId, "profile"));
+    // Bump any rating-tracked goals
+    recomputeGoals().catch((e) => console.error("recomputeGoals (rating):", e));
     revalidatePath("/", "layout");
     return { success: true as const, data: newEntry };
   } catch (err: unknown) {
@@ -91,26 +97,31 @@ export async function getRatingEntries() {
   const { userId } = await auth();
   if (!userId) return [];
 
-  try {
-    const supabase = createAdminClient();
+  const fetcher = unstable_cache(
+    async (uid: string) => {
+      try {
+        const supabase = createAdminClient();
+        const { data, error } = await supabase
+          .from("rating_entries")
+          .select("*")
+          .eq("user_id", uid)
+          .order("entry_date", { ascending: true })
+          .order("created_at", { ascending: true });
+        if (error) {
+          console.error("getRatingEntries error:", error.message);
+          return [];
+        }
+        return data ?? [];
+      } catch (err) {
+        console.error("getRatingEntries exception:", err);
+        return [];
+      }
+    },
+    ["rating_entries", userId],
+    { tags: [userTag(userId, "ratings")], revalidate: 60 },
+  );
 
-    const { data, error } = await supabase
-      .from("rating_entries")
-      .select("*")
-      .eq("user_id", userId)
-      .order("entry_date", { ascending: true })
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      console.error("Error fetching rating entries:", error.message);
-      return [];
-    }
-
-    return data ?? [];
-  } catch (err) {
-    console.error("Fetch entries error:", err);
-    return [];
-  }
+  return fetcher(userId);
 }
 
 export async function toggleStarEntry(id: string, isStarred: boolean) {
@@ -130,6 +141,7 @@ export async function toggleStarEntry(id: string, isStarred: boolean) {
 
     if (error) return { success: false as const, error: error.message };
 
+    updateTag(userTag(userId, "ratings"));
     revalidatePath("/", "layout");
     return { success: true as const };
   } catch (err) {
@@ -179,6 +191,8 @@ export async function deleteRatingEntry(id: string) {
       })
       .eq("user_id", userId);
 
+    updateTag(userTag(userId, "ratings"));
+    updateTag(userTag(userId, "profile"));
     revalidatePath("/", "layout");
     return { success: true as const };
   } catch (err) {

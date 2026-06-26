@@ -21,12 +21,15 @@ let cached: SupabaseClient | null = null;
 export function createAdminClient(): SupabaseClient {
   if (cached) return cached;
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  // Prefer the pooled connection string in production (PgBouncer in
+  // transaction mode). Falls back to the direct URL when unset.
+  const url =
+    process.env.SUPABASE_POOLER_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceKey) {
     throw new Error(
-      "Missing Supabase env vars. Need NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+      "Missing Supabase env vars. Need NEXT_PUBLIC_SUPABASE_URL (or SUPABASE_POOLER_URL) and SUPABASE_SERVICE_ROLE_KEY.",
     );
   }
 
@@ -34,6 +37,11 @@ export function createAdminClient(): SupabaseClient {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
+    },
+    db: {
+      // Default schema is "public"; setting it explicitly silences a
+      // Supabase warning when running against a pooled connection.
+      schema: "public",
     },
   });
 
