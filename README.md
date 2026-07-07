@@ -9,7 +9,7 @@
 Track ratings, games, puzzles, habits, journal entries and goals — all in one
 editorial-grade product that feels like a Hermès-bound chess manuscript, not a SaaS dashboard.
 
-[Live demo](#) · [Architecture](#architecture) · [Tech stack](#tech-stack) · [Local setup](#local-setup)
+**[🌐 Live demo](https://pawn-to-queen.vercel.app)** · [Architecture](#architecture) · [Tech stack](#tech-stack) · [Local setup](#local-setup)
 
 ---
 
