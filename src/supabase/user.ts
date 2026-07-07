@@ -29,8 +29,8 @@ export async function createUserClient(): Promise<SupabaseClient> {
   const { getToken } = await auth();
   const token = await getToken({ template: "supabase" });
 
-  const url =
-    process.env.SUPABASE_POOLER_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  // Supabase JS SDK needs the HTTPS project URL, not a pooler URL.
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !anonKey) {
