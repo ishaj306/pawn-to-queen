@@ -1,10 +1,11 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath, unstable_cache, updateTag } from "next/cache";
+import { updateTag, unstable_cache } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
 import { userTag } from "@/lib/cache-tags";
+import { puzzleSchema, firstIssue } from "@/lib/validation";
 import { recomputeGoals } from "@/features/goals/actions";
 import type { PuzzleRow } from "@/types/database";
 
@@ -25,18 +26,22 @@ export async function createPuzzle(input: CreatePuzzleInput) {
   const { userId } = await auth();
   if (!userId) return { success: false as const, error: "Not signed in." };
 
+  const parsed = puzzleSchema.safeParse(input);
+  if (!parsed.success) return { success: false as const, error: firstIssue(parsed.error) };
+  const v = parsed.data;
+
   try {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("puzzles")
       .insert({
         user_id:       userId,
-        session_date:  input.session_date,
-        count:         input.count,
-        accuracy:      input.accuracy ?? null,
-        minutes:       input.minutes ?? null,
-        puzzle_rating: input.puzzle_rating ?? null,
-        notes:         input.notes ?? null,
+        session_date:  v.session_date,
+        count:         v.count,
+        accuracy:      v.accuracy ?? null,
+        minutes:       v.minutes ?? null,
+        puzzle_rating: v.puzzle_rating ?? null,
+        notes:         v.notes ?? null,
       })
       .select()
       .single();
@@ -45,7 +50,6 @@ export async function createPuzzle(input: CreatePuzzleInput) {
 
     updateTag(userTag(userId, "puzzles"));
     recomputeGoals().catch((e) => console.error("recomputeGoals (puzzle):", e));
-    revalidatePath("/", "layout");
     return { success: true as const, data: data as unknown as PuzzleRow };
   } catch (err) {
     console.error("createPuzzle error:", err);
@@ -57,10 +61,10 @@ export async function getPuzzles(): Promise<PuzzleRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
+  const supabase = createAdminClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
       try {
-        const supabase = createAdminClient();
         const { data, error } = await supabase
           .from("puzzles")
           .select("*")
@@ -98,7 +102,6 @@ export async function deletePuzzle(id: string) {
     if (error) return { success: false as const, error: error.message };
 
     updateTag(userTag(userId, "puzzles"));
-    revalidatePath("/", "layout");
     return { success: true as const };
   } catch (err) {
     console.error("deletePuzzle error:", err);

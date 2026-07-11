@@ -22,11 +22,21 @@ import { getJournalEntries } from "@/features/journal/actions";
 import type {
   GameRow,
   JournalRow,
+  JournalMood,
   PuzzleRow,
   RatingEntryRow,
 } from "@/types/database";
 
 const PIECES = { king: "♔", queen: "♕", rook: "♖", bishop: "♗", knight: "♘", pawn: "♙" };
+
+const MOOD_META: Record<JournalMood, { label: string; glyph: string; color: string }> = {
+  focused:    { label: "Focused",    glyph: "◎", color: "var(--emerald)" },
+  excited:    { label: "Excited",    glyph: "✦", color: "var(--gold-deep)" },
+  calm:       { label: "Calm",       glyph: "❍", color: "var(--emerald-light)" },
+  curious:    { label: "Curious",    glyph: "✧", color: "var(--gold-deep)" },
+  tired:      { label: "Tired",      glyph: "☾", color: "var(--text-muted)" },
+  frustrated: { label: "Frustrated", glyph: "▲", color: "var(--danger)" },
+};
 
 type Window = "weekly" | "monthly" | "yearly";
 
@@ -83,6 +93,7 @@ export default function StatsPage() {
   const trend = useMemo(() => computeTrend(filt, windowSel), [filt, windowSel]);
   const openings = useMemo(() => topOpenings(filt.g), [filt.g]);
   const insights = useMemo(() => computeInsights(filt), [filt]);
+  const moodPerf = useMemo(() => computeMoodPerformance(filt), [filt]);
 
   if (loading) return <LoadingShell />;
 
@@ -222,12 +233,150 @@ export default function StatsPage() {
             </div>
           </section>
         </FadeUp>
+
+        {/* Emotional analytics — mood vs result */}
+        <FadeUp>
+          <section className="relative bg-white border border-gold/45 rounded-sm p-7 lg:p-9 overflow-hidden">
+            <CornerBrackets />
+            <SectionHeading eyebrow="Emotional Analytics" title="How feeling shapes the result" />
+            {!moodPerf.rows.some((r) => r.games > 0) ? (
+              <p className="font-serif-quote italic text-ink/55 text-sm max-w-lg">
+                Journal your mood on the days you play, and this reveals which states of mind win you games.
+                Not enough overlapping days in this window yet.
+              </p>
+            ) : (
+              <>
+                {moodPerf.best && (
+                  <p className="mb-7 font-serif-quote italic text-lg text-ink/75 max-w-2xl">
+                    You win most when you feel{" "}
+                    <span className="not-italic font-medium" style={{ color: moodPerf.best.color }}>
+                      {moodPerf.best.label.toLowerCase()}
+                    </span>{" "}
+                    — {moodPerf.best.winRate}% across {moodPerf.best.games} games.
+                    {moodPerf.tilt && moodPerf.tilt.mood !== moodPerf.best.mood && (
+                      <>
+                        {" "}Beware{" "}
+                        <span className="not-italic font-medium" style={{ color: moodPerf.tilt.color }}>
+                          {moodPerf.tilt.label.toLowerCase()}
+                        </span>
+                        : just {moodPerf.tilt.winRate}%.
+                      </>
+                    )}
+                  </p>
+                )}
+                <ul className="space-y-4">
+                  {moodPerf.rows.filter((r) => r.games > 0).map((r, i) => (
+                    <li key={r.mood}>
+                      <div className="flex items-baseline justify-between mb-1.5 gap-4">
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="text-base leading-none" style={{ color: r.color }} aria-hidden="true">{r.glyph}</span>
+                          <span className="font-display text-base text-ink">{r.label}</span>
+                        </span>
+                        <span className="text-[11px] tracking-[0.16em] uppercase text-ink/55 text-right shrink-0">
+                          {r.winRate}% win · {r.games} games
+                          {r.ratingDelta !== 0 && (
+                            <span style={{ color: r.ratingDelta > 0 ? "var(--emerald)" : "var(--danger)" }}>
+                              {" "}· {r.ratingDelta > 0 ? "+" : ""}{r.ratingDelta} rating
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-ink/10 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          whileInView={{ width: `${r.winRate}%` }}
+                          viewport={{ once: true }}
+                          transition={{ duration: 0.8, delay: i * 0.05 }}
+                          className="h-full"
+                          style={{ backgroundColor: r.color }}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </section>
+        </FadeUp>
       </div>
     </div>
   );
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
+
+interface MoodPerf {
+  mood: JournalMood;
+  label: string;
+  glyph: string;
+  color: string;
+  games: number;
+  wins: number;
+  winRate: number;
+  days: number;
+  ratingDelta: number;
+}
+
+// Correlates journal mood with same-day game outcomes and rating change.
+// A game/rating "inherits" the mood the player journaled that calendar day.
+function computeMoodPerformance(f: Filtered): {
+  rows: MoodPerf[];
+  best: MoodPerf | null;
+  tilt: MoodPerf | null;
+} {
+  const moodByDate = new Map<string, JournalMood>();
+  for (const j of f.j) {
+    if (j.mood && !moodByDate.has(j.entry_date)) moodByDate.set(j.entry_date, j.mood);
+  }
+
+  const agg = new Map<JournalMood, { games: number; wins: number; days: Set<string>; delta: number }>();
+  const ensure = (m: JournalMood) => {
+    let e = agg.get(m);
+    if (!e) { e = { games: 0, wins: 0, days: new Set(), delta: 0 }; agg.set(m, e); }
+    return e;
+  };
+
+  for (const g of f.g) {
+    const m = moodByDate.get(g.played_at);
+    if (!m) continue;
+    const e = ensure(m);
+    e.games += 1;
+    if (g.result === "win") e.wins += 1;
+    e.days.add(g.played_at);
+  }
+
+  const sortedR = [...f.r].sort((a, b) =>
+    a.entry_date < b.entry_date ? -1 : a.entry_date > b.entry_date ? 1 : 0,
+  );
+  for (let i = 1; i < sortedR.length; i++) {
+    const m = moodByDate.get(sortedR[i].entry_date);
+    if (!m) continue;
+    ensure(m).delta += sortedR[i].rating - sortedR[i - 1].rating;
+  }
+
+  const rows: MoodPerf[] = [];
+  for (const [mood, e] of agg) {
+    if (e.games === 0 && e.delta === 0) continue;
+    const meta = MOOD_META[mood];
+    rows.push({
+      mood,
+      label: meta.label,
+      glyph: meta.glyph,
+      color: meta.color,
+      games: e.games,
+      wins: e.wins,
+      winRate: e.games ? Math.round((e.wins / e.games) * 100) : 0,
+      days: e.days.size,
+      ratingDelta: e.delta,
+    });
+  }
+  rows.sort((a, b) => b.winRate - a.winRate || b.games - a.games);
+
+  const withEnough = rows.filter((r) => r.games >= 2);
+  const best = withEnough[0] ?? null;
+  const tilt = withEnough.length > 1 ? withEnough[withEnough.length - 1] : null;
+  return { rows, best, tilt };
+}
 
 interface Filtered {
   r: RatingEntryRow[];

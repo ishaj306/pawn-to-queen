@@ -18,6 +18,7 @@ const isProtected = createRouteMatcher([
   "/journal(.*)",
   "/study(.*)",
   "/achievements(.*)",
+  "/wrapped(.*)",
   "/stats(.*)",
   "/calendar(.*)",
 ]);

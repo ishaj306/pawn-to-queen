@@ -31,9 +31,9 @@ export async function getDailyAggregates(
   // We tag by every resource the function touches. ANY write to those
   // tables busts this aggregate cache. Cache key includes the date
   // window so a year query and a week query don't share state.
+  const supabase = createAdminClient();
   const fetcher = unstable_cache(
     async (uid: string, s: string, e: string) => {
-      const supabase = createAdminClient();
       const { data, error } = await supabase.rpc("get_user_daily_aggregates", {
         p_user_id:    uid,
         p_start_date: s,

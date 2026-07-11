@@ -251,3 +251,31 @@ body.dashboard-scroll {
 .animate-fade-in-up {
   animation: fadeInUp 0.6s ease-out both;
 }
+
+/* Chess-piece "lighting up" — the Pawn→Queen ascent on the landing page.
+   Each piece dims, then brightens with a gold glow in sequence via a
+   staggered animation-delay set inline per piece. */
+@keyframes pieceLight {
+  0%, 15% {
+    opacity: 0.22;
+    filter: grayscale(0.55) brightness(0.85);
+    transform: translateY(3px) scale(0.93);
+  }
+  42%, 58% {
+    opacity: 1;
+    filter: grayscale(0) brightness(1.05)
+      drop-shadow(0 6px 16px rgba(230, 196, 106, 0.55));
+    transform: translateY(0) scale(1.04);
+  }
+  85%, 100% {
+    opacity: 0.22;
+    filter: grayscale(0.55) brightness(0.85);
+    transform: translateY(3px) scale(0.93);
+  }
+}
+.animate-piece-light {
+  animation: pieceLight 5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-piece-light { animation: none; opacity: 1; }
+}

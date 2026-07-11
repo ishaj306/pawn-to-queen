@@ -6,42 +6,35 @@ import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
 import { useAuthStore } from "@/store/authStore";
+import { Piece, type PieceType } from "@/components/shared/piece";
 
 // ─────────────────────────────────────────────────────────────
 //  Pawn to Queen — Dashboard Shell
 //  Sidebar + main content area, journal-styled
 // ─────────────────────────────────────────────────────────────
 
-const PIECES = {
-  king: "♔",
-  queen: "♕",
-  rook: "♖",
-  bishop: "♗",
-  knight: "♘",
-  pawn: "♙",
-};
-
 interface NavItem {
   name: string;
   href: string;
-  piece: string;
+  piece: PieceType;
   ready?: boolean;
 }
 
 // 12 chapters of the journal, per the dashboard spec. All routes wired.
 const NAV: NavItem[] = [
-  { name: "Dashboard",      href: "/dashboard",    piece: PIECES.queen,  ready: true },
-  { name: "Rating Tracker", href: "/ratings",      piece: PIECES.king,   ready: true },
-  { name: "Games Log",      href: "/games",        piece: PIECES.rook,   ready: true },
-  { name: "Puzzle Tracker", href: "/puzzles",      piece: PIECES.bishop, ready: true },
-  { name: "Goals",          href: "/goals",        piece: PIECES.knight, ready: true },
-  { name: "Study Planner",  href: "/study",        piece: PIECES.pawn,   ready: true },
-  { name: "Journal",        href: "/journal",      piece: PIECES.bishop, ready: true },
-  { name: "Achievements",   href: "/achievements", piece: PIECES.queen,  ready: true },
-  { name: "Statistics",     href: "/stats",        piece: PIECES.knight, ready: true },
-  { name: "Calendar",       href: "/calendar",     piece: PIECES.rook,   ready: true },
-  { name: "Profile",        href: "/profile",      piece: PIECES.king,   ready: true },
-  { name: "Settings",       href: "/settings",     piece: PIECES.pawn,   ready: true },
+  { name: "Dashboard",      href: "/dashboard",    piece: "queen",  ready: true },
+  { name: "Rating Tracker", href: "/ratings",      piece: "king",   ready: true },
+  { name: "Games Log",      href: "/games",        piece: "rook",   ready: true },
+  { name: "Puzzle Tracker", href: "/puzzles",      piece: "bishop", ready: true },
+  { name: "Goals",          href: "/goals",        piece: "knight", ready: true },
+  { name: "Study Planner",  href: "/study",        piece: "pawn",   ready: true },
+  { name: "Journal",        href: "/journal",      piece: "bishop", ready: true },
+  { name: "Achievements",   href: "/achievements", piece: "queen",  ready: true },
+  { name: "Chess Wrapped",  href: "/wrapped",      piece: "queen",  ready: true },
+  { name: "Statistics",     href: "/stats",        piece: "knight", ready: true },
+  { name: "Calendar",       href: "/calendar",     piece: "rook",   ready: true },
+  { name: "Profile",        href: "/profile",      piece: "king",   ready: true },
+  { name: "Settings",       href: "/settings",     piece: "pawn",   ready: true },
 ];
 
 export default function DashboardLayout({
@@ -72,15 +65,14 @@ export default function DashboardLayout({
   return (
     <div className="flex min-h-screen bg-ivory">
       {/* ─── DESKTOP SIDEBAR ─── */}
-      <aside className="hidden md:flex flex-col w-72 shrink-0 bg-white border-r border-gold/40 relative">
+      <aside className="hidden md:flex flex-col w-72 shrink-0 bg-white border-r border-gold/40 sticky top-0 h-screen self-start">
         {/* Faint background ornament */}
-        <span
-          className="pointer-events-none absolute -bottom-6 -left-10 font-display text-emerald/[0.05] leading-none select-none"
-          style={{ fontSize: "18rem" }}
-          aria-hidden="true"
-        >
-          {PIECES.queen}
-        </span>
+        <Piece
+          type="queen"
+          color="green"
+          size={288}
+          className="pointer-events-none absolute -bottom-6 -left-10 opacity-[0.06] select-none"
+        />
 
         {/* Brand */}
         <Link
@@ -88,12 +80,7 @@ export default function DashboardLayout({
           className="relative px-7 pt-8 pb-6 border-b border-gold/30 group"
         >
           <div className="flex items-center gap-3">
-            <span
-              className="font-display text-3xl text-emerald leading-none"
-              aria-hidden="true"
-            >
-              {PIECES.queen}
-            </span>
+            <Piece type="queen" color="green" size={34} className="w-8 h-8 shrink-0" priority />
             <div>
               <p className="font-display text-[19px] text-ink leading-none">
                 Pawn <span className="text-gold-deep italic">to</span> Queen
@@ -111,7 +98,7 @@ export default function DashboardLayout({
             The Journal
           </p>
           <ul className="space-y-0.5">
-            {NAV.map((item) => {
+            {NAV.map((item, i) => {
               const isActive = pathname === item.href;
               const isReady = item.ready;
               const content = (
@@ -130,18 +117,14 @@ export default function DashboardLayout({
                       aria-hidden="true"
                     />
                   )}
-                  <span
-                    className={`font-display text-lg leading-none w-5 text-center ${
-                      isActive
-                        ? "text-emerald"
-                        : isReady
-                          ? "text-gold-deep group-hover:text-emerald"
-                          : "text-ink/30"
+                  <Piece
+                    type={item.piece}
+                    color={i % 2 === 0 ? "gold" : "green"}
+                    size={22}
+                    className={`w-5 h-5 shrink-0 transition-opacity ${
+                      isActive ? "" : isReady ? "opacity-85 group-hover:opacity-100" : "opacity-30"
                     }`}
-                    aria-hidden="true"
-                  >
-                    {item.piece}
-                  </span>
+                  />
                   <span className="flex-1 font-sans">{item.name}</span>
                   {!isReady && (
                     <span className="text-[8.5px] tracking-[0.2em] uppercase text-gold-deep/70 bg-gold-light/40 px-1.5 py-0.5 rounded-sm">
@@ -222,7 +205,7 @@ export default function DashboardLayout({
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-gold/40 flex items-center justify-around z-40">
         {NAV.filter((n) => n.ready)
           .slice(0, 5)
-          .map((item) => {
+          .map((item, i) => {
             const isActive = pathname === item.href;
             return (
               <Link
@@ -232,12 +215,12 @@ export default function DashboardLayout({
                   isActive ? "text-emerald" : "text-ink/55"
                 }`}
               >
-                <span
-                  className="font-display text-xl leading-none"
-                  aria-hidden="true"
-                >
-                  {item.piece}
-                </span>
+                <Piece
+                  type={item.piece}
+                  color={i % 2 === 0 ? "gold" : "green"}
+                  size={24}
+                  className={`w-6 h-6 transition-opacity ${isActive ? "" : "opacity-70"}`}
+                />
                 <span className="text-[9px] tracking-[0.16em] uppercase">
                   {item.name.split(" ")[0]}
                 </span>

@@ -1,11 +1,12 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath, unstable_cache, updateTag } from "next/cache";
+import { updateTag, unstable_cache } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
 import { userTag } from "@/lib/cache-tags";
-import type { ProfileRow } from "@/types/database";
+import { profileSchema, firstIssue } from "@/lib/validation";
+import type { ProfileRow, RatingFormat } from "@/types/database";
 
 // ─────────────────────────────────────────────────────────────
 //  Profile updates — Clerk + service-role
@@ -14,6 +15,7 @@ import type { ProfileRow } from "@/types/database";
 export interface UpdateProfileInput {
   full_name?:          string | null;
   username?:           string | null;
+  primary_format?:     RatingFormat;
   target_rating?:      number;
   chess_com_username?: string | null;
   lichess_username?:   string | null;
@@ -26,9 +28,9 @@ export async function getProfile(): Promise<ProfileRow | null> {
   const { userId } = await auth();
   if (!userId) return null;
 
+  const supabase = createAdminClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
-      const supabase = createAdminClient();
       const { data } = await supabase
         .from("profiles")
         .select("*")
@@ -46,11 +48,15 @@ export async function updateProfile(input: UpdateProfileInput) {
   const { userId } = await auth();
   if (!userId) return { success: false as const, error: "Not signed in." };
 
+  const parsed = profileSchema.safeParse(input);
+  if (!parsed.success) return { success: false as const, error: firstIssue(parsed.error) };
+  const v = parsed.data;
+
   try {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("profiles")
-      .update({ ...input, updated_at: new Date().toISOString() })
+      .update({ ...v, updated_at: new Date().toISOString() })
       .eq("user_id", userId)
       .select()
       .single();
@@ -58,7 +64,6 @@ export async function updateProfile(input: UpdateProfileInput) {
     if (error) return { success: false as const, error: error.message };
 
     updateTag(userTag(userId, "profile"));
-    revalidatePath("/", "layout");
     return { success: true as const, data: data as unknown as ProfileRow };
   } catch (err) {
     console.error("updateProfile error:", err);

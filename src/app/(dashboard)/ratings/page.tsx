@@ -211,44 +211,24 @@ export default function RatingsPage() {
   }, [allEntries]);
 
   // Chart data — sample if too few real points
-  const chartData = useMemo(() => {
-    if (entries.length < 2) {
-      const today = new Date();
-      const sample = [620, 645, 660, 658, 685, 705, 720, 735, 760, 785, 810, 840];
-      return sample.map((rating, i) => {
-        const d = new Date(today);
-        d.setDate(d.getDate() - (sample.length - 1 - i) * 4);
-        return {
-          date: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-          rating,
-          sample: true,
-        };
-      });
-    }
-    return entries.map((e) => ({
-      date: new Date(e.entry_date).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        timeZone: "UTC",
-      }),
-      rating: e.rating,
-      sample: false,
-    }));
-  }, [entries]);
+  const chartData = useMemo(
+    () =>
+      entries.map((e) => ({
+        date: new Date(e.entry_date + "T00:00:00Z").toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          timeZone: "UTC",
+        }),
+        rating: e.rating,
+      })),
+    [entries],
+  );
 
-  const isSampleChart = chartData[0]?.sample ?? true;
+  // "isSample" now simply means "no real data yet" — never fabricated points.
+  const isSampleChart = chartData.length === 0;
 
   // Weekly rating change for monthly progress bar chart
   const weeklyDelta = useMemo(() => {
-    if (entries.length < 2) {
-      return [
-        { label: "W1", delta: 12 },
-        { label: "W2", delta: -8 },
-        { label: "W3", delta: 18 },
-        { label: "W4", delta: 6 },
-        { label: "W5", delta: 22 },
-      ];
-    }
     // Bucket entries into ISO weeks (simple — by YYYY-WW)
     const byWeek: Record<string, { first: number; last: number }> = {};
     for (const e of entries) {
@@ -605,8 +585,8 @@ function MainChart({
   format: RatingFormat;
   hasEntries: boolean;
 }) {
-  const min = Math.min(...data.map((d) => d.rating));
-  const max = Math.max(...data.map((d) => d.rating));
+  const min = data.length ? Math.min(...data.map((d) => d.rating)) : 0;
+  const max = data.length ? Math.max(...data.map((d) => d.rating)) : 1000;
   const yDomain = [Math.max(0, min - 80), max + 80] as [number, number];
 
   const summaryStats = [
@@ -643,7 +623,7 @@ function MainChart({
             </h2>
             <p className="mt-2 font-serif-quote italic text-ink/60 text-sm">
               {isSample
-                ? "A glimpse — log entries to replace this with your own."
+                ? "No entries yet — connect an account in Settings and Sync, or add a rating."
                 : "Each point is a moment you decided to track."}
             </p>
           </div>

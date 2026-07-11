@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React from "react";
 import Link from "next/link";
 import {
   CartesianGrid,
@@ -15,13 +15,12 @@ import {
 import { Bell, ChevronRight, Flame } from "lucide-react";
 
 import { useAuthStore } from "@/store/authStore";
-import { getRatingEntries } from "@/features/ratings/actions";
-import {
-  calculateStreak,
-  getNextMilestone,
-  titleFor,
-  type DbRatingEntry,
-} from "@/utils/stats";
+import { StreakNudge } from "@/components/shared/streak-nudge";
+import { useChessData } from "@/features/chess-data/use-chess-data";
+import { BADGES } from "@/lib/achievements";
+import { getNextMilestone, titleFor } from "@/utils/stats";
+import type { ChessStats } from "@/lib/chess-stats";
+import type { GameRow, GoalRow, AchievementRow } from "@/types/database";
 
 // ─────────────────────────────────────────────────────────────
 //  Pawn to Queen — Dashboard (Page 3)
@@ -97,74 +96,33 @@ export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
 
-  const [entries, setEntries] = useState<DbRatingEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await getRatingEntries();
-        if (!cancelled) setEntries(data as unknown as DbRatingEntry[]);
-      } catch (err) {
-        console.error("Failed to load rating entries:", err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data, stats, loading } = useChessData();
 
   const displayName =
     profile?.full_name || user?.email?.split("@")[0] || "Player";
   const firstName = displayName.split(" ")[0];
 
-  // ─── Real stats from rating_entries ───
-  const hasEntries = entries.length > 0;
-  const currentRating = hasEntries
-    ? entries[entries.length - 1].rating
-    : (profile?.current_rating ?? 800);
-  const peakRating = hasEntries
-    ? Math.max(...entries.map((e) => e.rating))
-    : (profile?.peak_rating ?? currentRating);
+  // Every number below reads from the ONE computed source (stats), so
+  // the dashboard always matches the Rating Tracker, Stats and Wrapped.
+  const currentRating = stats.currentRating;
+  const peakRating = stats.peakRating;
   const targetRating = getNextMilestone(currentRating);
-  const streak = calculateStreak(entries);
-  const ratingGrowth = hasEntries
-    ? currentRating - entries[0].rating
-    : 0;
-
+  const streak = stats.currentStreak;
+  const ratingGrowth = stats.ratingGrowth;
+  const gamesPlayed = stats.totalGames;
+  const winRate = stats.winRate;
   const title = titleFor(currentRating);
 
-  // ─── Rating chart data ───
-  const chartData = useMemo(() => {
-    if (entries.length < 2) {
-      // Sample arc so the centerpiece always feels alive on a fresh account.
-      const today = new Date();
-      const sample = [780, 795, 810, 802, 825, 840, 838, 855, 870, 880];
-      return sample.map((rating, i) => {
-        const d = new Date(today);
-        d.setDate(d.getDate() - (sample.length - 1 - i) * 3);
-        return {
-          date: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-          rating,
-          sample: true,
-        };
-      });
-    }
-    return entries.slice(-12).map((e) => ({
-      date: new Date(e.entry_date).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        timeZone: "UTC",
-      }),
-      rating: e.rating,
-      sample: false,
-    }));
-  }, [entries]);
-
-  const isSampleChart = chartData[0]?.sample ?? true;
+  // Rating chart — the real primary-format series (empty until data exists,
+  // never a sample arc). Last 12 points to keep the centerpiece readable.
+  const chartData = stats.ratingSeries.slice(-12).map((e) => ({
+    date: new Date(e.date + "T00:00:00Z").toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    }),
+    rating: e.rating,
+  }));
 
   if (loading) return <LoadingShell />;
 
@@ -199,13 +157,16 @@ export default function DashboardPage() {
           avatarLetter={displayName[0]?.toUpperCase() ?? "P"}
         />
 
+        {/* ─── RETENTION NUDGE — narrative streak ─── */}
+        <StreakNudge />
+
         {/* ─── STAT CARDS ─── */}
         <StatCardsRow
           currentRating={currentRating}
           peakRating={peakRating}
           targetRating={targetRating}
-          winRate={62}
-          gamesPlayed={47}
+          winRate={winRate}
+          gamesPlayed={gamesPlayed}
           streak={streak}
           ratingGrowth={ratingGrowth}
         />
@@ -216,7 +177,6 @@ export default function DashboardPage() {
         {/* ─── RATING CHART CENTERPIECE ─── */}
         <RatingChartPanel
           data={chartData}
-          isSample={isSampleChart}
           title={title}
           currentRating={currentRating}
         />
@@ -224,22 +184,26 @@ export default function DashboardPage() {
         {/* ─── 2-COL: Recent Games  |  Goals + Puzzle Streak ─── */}
         <div className="grid lg:grid-cols-12 gap-8">
           <div className="lg:col-span-7 space-y-8">
-            <RecentGames />
-            <MonthlyProgress />
+            <RecentGames games={stats.recentGames} />
+            <MonthlyProgress
+              weeks={stats.gamesPerWeek}
+              thisMonth={stats.gamesThisMonth}
+              momPct={stats.monthOverMonthPct}
+            />
           </div>
           <aside className="lg:col-span-5 space-y-8">
-            <GoalsWidget />
-            <PuzzleStreakWidget />
+            <GoalsWidget goals={data?.goals ?? []} />
+            <PuzzleStreakWidget stats={stats} />
           </aside>
         </div>
 
         {/* ─── 2-COL: Achievements  |  Insights ─── */}
         <div className="grid lg:grid-cols-12 gap-8">
           <div className="lg:col-span-6">
-            <AchievementsWidget />
+            <AchievementsWidget achievements={data?.achievements ?? []} />
           </div>
           <div className="lg:col-span-6">
-            <InsightsCard />
+            <InsightsCard stats={stats} />
           </div>
         </div>
 
@@ -504,17 +468,16 @@ function QuickActions() {
 
 function RatingChartPanel({
   data,
-  isSample,
   title,
   currentRating,
 }: {
   data: { date: string; rating: number }[];
-  isSample: boolean;
   title: { name: string; piece: string };
   currentRating: number;
 }) {
-  const min = Math.min(...data.map((d) => d.rating));
-  const max = Math.max(...data.map((d) => d.rating));
+  const hasData = data.length > 0;
+  const min = hasData ? Math.min(...data.map((d) => d.rating)) : 0;
+  const max = hasData ? Math.max(...data.map((d) => d.rating)) : 1000;
   const yDomain = [Math.max(0, min - 60), max + 60] as [number, number];
 
   return (
@@ -543,9 +506,9 @@ function RatingChartPanel({
               How your <span className="italic text-emerald">rating</span> has moved
             </h2>
             <p className="mt-2 font-serif-quote italic text-ink/60 text-sm">
-              {isSample
-                ? "A glimpse — log a few entries to replace this with your own."
-                : `Currently sitting at ${currentRating}.`}
+              {hasData
+                ? `Currently sitting at ${currentRating}.`
+                : "No rating history yet — connect an account or log a rating."}
             </p>
           </div>
 
@@ -567,6 +530,14 @@ function RatingChartPanel({
           </div>
         </div>
 
+        {!hasData ? (
+          <div className="h-72 md:h-80 w-full flex flex-col items-center justify-center text-center gap-3 border border-dashed border-gold/40 rounded-sm">
+            <span className="font-display text-5xl text-emerald/20" aria-hidden="true">{title.piece}</span>
+            <p className="font-serif-quote italic text-ink/55 text-sm max-w-xs">
+              No rating history yet. Add your Chess.com / Lichess username in Settings, then hit Sync.
+            </p>
+          </div>
+        ) : (
         <div className="h-72 md:h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
@@ -644,6 +615,7 @@ function RatingChartPanel({
             </LineChart>
           </ResponsiveContainer>
         </div>
+        )}
 
         <div className="mt-6 flex items-center justify-between text-[11px] tracking-[0.22em] uppercase text-ink/55">
           <div className="flex items-center gap-5">
@@ -674,43 +646,20 @@ function RatingChartPanel({
 
 type GameResult = "win" | "loss" | "draw";
 
-const SAMPLE_GAMES: {
-  opponent: string;
-  opening: string;
-  accuracy: number;
-  result: GameResult;
-  blunders: number;
-  brilliant: number;
-  when: string;
-}[] = [
-  {
-    opponent: "M. Goldberg",
-    opening: "Italian Game",
-    accuracy: 87,
-    result: "win",
-    blunders: 1,
-    brilliant: 2,
-    when: "Yesterday · 8:42 pm",
-  },
-  {
-    opponent: "L. Petrov",
-    opening: "Sicilian Najdorf",
-    accuracy: 74,
-    result: "loss",
-    blunders: 3,
-    brilliant: 0,
-    when: "Yesterday · 6:11 pm",
-  },
-  {
-    opponent: "A. Karim",
-    opening: "Queen's Gambit Declined",
-    accuracy: 81,
-    result: "draw",
-    blunders: 1,
-    brilliant: 1,
-    when: "Two days ago",
-  },
-];
+// Relative "when" label from a YYYY-MM-DD date.
+function relativeWhen(iso: string): string {
+  const then = new Date(iso + "T00:00:00Z").getTime();
+  const days = Math.round((Date.now() - then) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+  if (days < 14) return "Last week";
+  return new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
 
 const RESULT_STYLES: Record<GameResult, { card: string; label: string; chip: string }> = {
   win: {
@@ -730,7 +679,17 @@ const RESULT_STYLES: Record<GameResult, { card: string; label: string; chip: str
   },
 };
 
-function RecentGames() {
+function RecentGames({ games }: { games: GameRow[] }) {
+  const recent = games.slice(0, 3).map((g) => ({
+    opponent: g.opponent,
+    opening: g.opening,
+    accuracy: g.accuracy,
+    result: g.result,
+    blunders: g.blunders,
+    brilliant: g.brilliant,
+    when: relativeWhen(g.played_at),
+  }));
+
   return (
     <section>
       <SectionHeading
@@ -738,8 +697,15 @@ function RecentGames() {
         title="The last few rounds"
         action={<Link href="/games" className="text-emerald hover:text-emerald-deep text-[11px] tracking-[0.22em] uppercase transition-colors">View Log →</Link>}
       />
+      {recent.length === 0 ? (
+        <div className="border border-dashed border-gold/40 rounded-sm p-8 text-center">
+          <p className="font-serif-quote italic text-ink/55 text-sm">
+            No games yet. Connect your Chess.com / Lichess account and Sync, or log one manually.
+          </p>
+        </div>
+      ) : (
       <div className="space-y-4">
-        {SAMPLE_GAMES.map((g, i) => {
+        {recent.map((g, i) => {
           const styles = RESULT_STYLES[g.result];
           return (
             <article
@@ -766,9 +732,9 @@ function RecentGames() {
                     {" · "}
                     Accuracy{" "}
                     <span className={`font-display text-base ${styles.label}`}>
-                      {g.accuracy}
+                      {g.accuracy ?? "—"}
                     </span>
-                    %
+                    {g.accuracy != null ? "%" : ""}
                   </p>
                 </div>
 
@@ -795,6 +761,7 @@ function RecentGames() {
           );
         })}
       </div>
+      )}
     </section>
   );
 }
@@ -803,15 +770,16 @@ function RecentGames() {
 //  MONTHLY PROGRESS
 // ─────────────────────────────────────────────────────────────
 
-function MonthlyProgress() {
-  const weeks = [
-    { label: "W1", games: 8 },
-    { label: "W2", games: 11 },
-    { label: "W3", games: 6 },
-    { label: "W4", games: 14 },
-    { label: "W5", games: 9 },
-  ];
-  const peak = Math.max(...weeks.map((w) => w.games));
+function MonthlyProgress({
+  weeks,
+  thisMonth,
+  momPct,
+}: {
+  weeks: { label: string; games: number }[];
+  thisMonth: number;
+  momPct: number | null;
+}) {
+  const peak = Math.max(...weeks.map((w) => w.games), 1);
 
   return (
     <section className="relative bg-white border border-gold/45 rounded-sm p-7">
@@ -852,8 +820,14 @@ function MonthlyProgress() {
       </div>
 
       <div className="mt-5 flex items-center justify-between text-[11px] tracking-[0.22em] uppercase text-ink/55 pt-4 border-t border-gold/25">
-        <span>Total · <span className="text-emerald font-display normal-case tracking-normal text-base">48</span> games</span>
-        <span className="text-emerald">+18% vs. last month</span>
+        <span>This month · <span className="text-emerald font-display normal-case tracking-normal text-base">{thisMonth}</span> games</span>
+        {momPct === null ? (
+          <span className="text-ink/45">— vs. last month</span>
+        ) : (
+          <span className={momPct >= 0 ? "text-emerald" : "text-destructive"}>
+            {momPct >= 0 ? "+" : ""}{momPct}% vs. last month
+          </span>
+        )}
       </div>
     </section>
   );
@@ -863,12 +837,17 @@ function MonthlyProgress() {
 //  GOALS
 // ─────────────────────────────────────────────────────────────
 
-function GoalsWidget() {
-  const goals = [
-    { name: "Reach 600 Rating",  progress: 88, target: "600",   complete: true,  current: "612" },
-    { name: "30 Day Streak",     progress: 40, target: "30 d",  complete: false, current: "12 d" },
-    { name: "Solve 100 Puzzles", progress: 65, target: "100",   complete: false, current: "65" },
-  ];
+function GoalsWidget({ goals }: { goals: GoalRow[] }) {
+  const rows = goals.slice(0, 4).map((g) => ({
+    name: g.title,
+    target: g.target_value,
+    current: g.current_value,
+    complete: g.completed_at != null,
+    progress: Math.min(
+      100,
+      Math.max(0, g.target_value ? Math.round((g.current_value / g.target_value) * 100) : 0),
+    ),
+  }));
 
   return (
     <section className="relative bg-white border border-gold/45 rounded-sm p-7">
@@ -888,8 +867,15 @@ function GoalsWidget() {
         compact
       />
 
+      {rows.length === 0 ? (
+        <div className="border border-dashed border-gold/40 rounded-sm p-6 text-center">
+          <p className="font-serif-quote italic text-ink/55 text-sm">
+            No goals yet. <Link href="/goals" className="text-emerald hover:underline">Set one →</Link>
+          </p>
+        </div>
+      ) : (
       <ul className="space-y-5">
-        {goals.map((g, i) => (
+        {rows.map((g, i) => (
           <li
             key={i}
             className={`p-4 rounded-sm border ${
@@ -920,6 +906,7 @@ function GoalsWidget() {
           </li>
         ))}
       </ul>
+      )}
     </section>
   );
 }
@@ -928,11 +915,15 @@ function GoalsWidget() {
 //  PUZZLE STREAK
 // ─────────────────────────────────────────────────────────────
 
-function PuzzleStreakWidget() {
-  // 7 cols × 5 rows mini heatmap
+function PuzzleStreakWidget({ stats }: { stats: ChessStats }) {
+  // 7 cols × 5 rows mini heatmap of REAL activity over the last 35 days.
+  const pad = (n: number) => String(n).padStart(2, "0");
   const cells = Array.from({ length: 35 }, (_, i) => {
-    const seed = (i * 13 + 7) % 5;
-    return seed;
+    const d = new Date();
+    d.setDate(d.getDate() - (34 - i));
+    const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const c = stats.activityByDate[iso] ?? 0;
+    return c === 0 ? 0 : c === 1 ? 1 : c === 2 ? 2 : c <= 4 ? 3 : 4;
   });
 
   return (
@@ -956,9 +947,9 @@ function PuzzleStreakWidget() {
       <div className="relative grid grid-cols-2 gap-5">
         <div>
           <div className="space-y-3">
-            <Stat label="Current Streak" value="12" suffix="days" />
-            <Stat label="Puzzles Solved" value="234" />
-            <Stat label="Puzzle Rating" value="1,142" />
+            <Stat label="Current Streak" value={String(stats.puzzleStreak)} suffix={stats.puzzleStreak === 1 ? "day" : "days"} />
+            <Stat label="Puzzles Solved" value={stats.puzzlesSolved.toLocaleString()} />
+            <Stat label="Puzzle Rating" value={stats.latestPuzzleRating != null ? stats.latestPuzzleRating.toLocaleString() : "—"} />
           </div>
         </div>
         <div>
@@ -1015,13 +1006,12 @@ function Stat({
 //  ACHIEVEMENTS
 // ─────────────────────────────────────────────────────────────
 
-function AchievementsWidget() {
-  const badges = [
-    { name: "First Win",     piece: PIECES.rook,   sub: "Won your first game",    on: "2026-04-12" },
-    { name: "10 Day Streak", piece: PIECES.knight, sub: "Logged 10 days running", on: "2026-05-01" },
-    { name: "500 ELO",       piece: PIECES.bishop, sub: "Crossed the 500 mark",   on: "2026-05-09" },
-    { name: "100 Puzzles",   piece: PIECES.pawn,   sub: "Solved 100 tactics",     on: "2026-06-02" },
-  ];
+function AchievementsWidget({ achievements }: { achievements: AchievementRow[] }) {
+  const badges = achievements
+    .slice(0, 4)
+    .map((a) => BADGES.find((b) => b.key === a.key))
+    .filter((b): b is (typeof BADGES)[number] => Boolean(b))
+    .map((b) => ({ name: b.name, piece: b.piece, sub: b.description }));
 
   return (
     <section className="relative bg-white border border-gold/45 rounded-sm p-7 overflow-hidden">
@@ -1047,6 +1037,13 @@ function AchievementsWidget() {
         compact
       />
 
+      {badges.length === 0 ? (
+        <div className="border border-dashed border-gold/40 rounded-sm p-6 text-center">
+          <p className="font-serif-quote italic text-ink/55 text-sm">
+            No badges yet — they unlock as you play, solve and log.
+          </p>
+        </div>
+      ) : (
       <div className="relative grid grid-cols-2 gap-3">
         {badges.map((b, i) => (
           <article
@@ -1074,6 +1071,7 @@ function AchievementsWidget() {
           </article>
         ))}
       </div>
+      )}
     </section>
   );
 }
@@ -1082,13 +1080,19 @@ function AchievementsWidget() {
 //  INSIGHTS
 // ─────────────────────────────────────────────────────────────
 
-function InsightsCard() {
-  const items = [
-    { label: "Best Playing Time",   value: "Evenings",        sub: "7 – 9 pm",          piece: PIECES.king },
-    { label: "Favourite Opening",   value: "Italian Game",    sub: "16 games · 68%",    piece: PIECES.bishop },
-    { label: "Most Common Mistake", value: "Move 18 blunders", sub: "Time-trouble",     piece: PIECES.rook },
-    { label: "Most Productive Day", value: "Tuesdays",        sub: "Avg. 4 games",      piece: PIECES.knight },
-  ];
+function InsightsCard({ stats }: { stats: ChessStats }) {
+  const items: { label: string; value: string; sub: string; piece: string }[] = [];
+  if (stats.favouriteOpening)
+    items.push({ label: "Favourite Opening", value: stats.favouriteOpening.name, sub: `${stats.favouriteOpening.games} games · ${stats.favouriteOpening.winPct}%`, piece: PIECES.bishop });
+  if (stats.bestOpening)
+    items.push({ label: "Strongest Opening", value: stats.bestOpening.name, sub: `${stats.bestOpening.winPct}% win rate`, piece: PIECES.queen });
+  if (stats.worstOpening && stats.worstOpening.name !== stats.bestOpening?.name)
+    items.push({ label: "Toughest Opening", value: stats.worstOpening.name, sub: `${stats.worstOpening.winPct}% · needs work`, piece: PIECES.rook });
+  if (stats.mostProductiveDay)
+    items.push({ label: "Most Productive Day", value: stats.mostProductiveDay.day, sub: `${stats.mostProductiveDay.games} games`, piece: PIECES.knight });
+  if (stats.avgAccuracy != null)
+    items.push({ label: "Average Accuracy", value: `${stats.avgAccuracy}%`, sub: `across ${stats.totalGames} games`, piece: PIECES.king });
+  const shown = items.slice(0, 4);
 
   return (
     <section className="relative bg-white border border-gold/45 rounded-sm p-7 overflow-hidden">
@@ -1108,8 +1112,15 @@ function InsightsCard() {
 
       <SectionHeading eyebrow="Insights" title="Patterns we noticed" compact />
 
+      {shown.length === 0 ? (
+        <div className="relative border border-dashed border-gold/40 rounded-sm p-6 text-center">
+          <p className="font-serif-quote italic text-ink/55 text-sm">
+            Insights appear once you have games logged. Connect an account and Sync.
+          </p>
+        </div>
+      ) : (
       <ul className="relative grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {items.map((it, i) => (
+        {shown.map((it, i) => (
           <li
             key={i}
             className="group bg-ivory/60 border border-gold/35 rounded-sm p-4 hover:border-emerald hover:bg-emerald/[0.03] transition-colors"
@@ -1136,6 +1147,7 @@ function InsightsCard() {
           </li>
         ))}
       </ul>
+      )}
     </section>
   );
 }

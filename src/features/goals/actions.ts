@@ -1,10 +1,11 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath, unstable_cache, updateTag } from "next/cache";
+import { updateTag, unstable_cache } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
 import { userTag } from "@/lib/cache-tags";
+import { goalSchema, firstIssue } from "@/lib/validation";
 import type { GoalRow, GoalMetric } from "@/types/database";
 
 // ─────────────────────────────────────────────────────────────
@@ -23,25 +24,28 @@ export async function createGoal(input: CreateGoalInput) {
   const { userId } = await auth();
   if (!userId) return { success: false as const, error: "Not signed in." };
 
+  const parsed = goalSchema.safeParse(input);
+  if (!parsed.success) return { success: false as const, error: firstIssue(parsed.error) };
+  const v = parsed.data;
+
   try {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("goals")
       .insert({
         user_id:       userId,
-        title:         input.title,
-        metric:        input.metric,
-        start_value:   input.start_value ?? 0,
-        current_value: input.start_value ?? 0,
-        target_value:  input.target_value,
-        due_date:      input.due_date ?? null,
+        title:         v.title,
+        metric:        v.metric,
+        start_value:   v.start_value ?? 0,
+        current_value: v.start_value ?? 0,
+        target_value:  v.target_value,
+        due_date:      v.due_date ?? null,
       })
       .select()
       .single();
     if (error) return { success: false as const, error: error.message };
 
     updateTag(userTag(userId, "goals"));
-    revalidatePath("/", "layout");
     return { success: true as const, data: data as unknown as GoalRow };
   } catch (err) {
     console.error("createGoal error:", err);
@@ -53,9 +57,9 @@ export async function getGoals(): Promise<GoalRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
+  const supabase = createAdminClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
-      const supabase = createAdminClient();
       const { data, error } = await supabase
         .from("goals")
         .select("*")
@@ -102,7 +106,6 @@ export async function updateGoalProgress(id: string, current_value: number) {
   if (error) return { success: false as const, error: error.message };
 
   updateTag(userTag(userId, "goals"));
-  revalidatePath("/", "layout");
   return { success: true as const };
 }
 
@@ -119,7 +122,6 @@ export async function deleteGoal(id: string) {
   if (error) return { success: false as const, error: error.message };
 
   updateTag(userTag(userId, "goals"));
-  revalidatePath("/", "layout");
   return { success: true as const };
 }
 
@@ -204,7 +206,6 @@ export async function recomputeGoals() {
 
   if (updated > 0) {
     updateTag(userTag(userId, "goals"));
-    revalidatePath("/", "layout");
   }
   return { success: true as const, updated };
 }

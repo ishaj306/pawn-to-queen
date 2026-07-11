@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { LogOut, Trash2, Loader2 } from "lucide-react";
 
 import { getProfile, updateProfile } from "@/features/profile/actions";
+import { ConnectedPlatforms } from "@/components/settings/connected-platforms";
 import type { ProfileRow } from "@/types/database";
 
 const PIECES = {
@@ -126,6 +127,11 @@ export default function SettingsPage() {
               </motion.p>
             )}
           </Section>
+        </FadeUp>
+
+        {/* ─── Connected platforms ─── */}
+        <FadeUp delay={0.05}>
+          <ConnectedPlatforms profile={profile} />
         </FadeUp>
 
         {/* ─── Account ─── */}

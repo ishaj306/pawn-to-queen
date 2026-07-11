@@ -1,10 +1,11 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath, unstable_cache, updateTag } from "next/cache";
+import { updateTag, unstable_cache } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
 import { userTag } from "@/lib/cache-tags";
+import { studySchema, firstIssue } from "@/lib/validation";
 import { recomputeGoals } from "@/features/goals/actions";
 import type { StudySessionRow, StudyKind } from "@/types/database";
 
@@ -24,17 +25,21 @@ export async function createStudySession(input: CreateStudyInput) {
   const { userId } = await auth();
   if (!userId) return { success: false as const, error: "Not signed in." };
 
+  const parsed = studySchema.safeParse(input);
+  if (!parsed.success) return { success: false as const, error: firstIssue(parsed.error) };
+  const v = parsed.data;
+
   try {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("study_sessions")
       .insert({
         user_id:    userId,
-        entry_date: input.entry_date,
-        kind:       input.kind,
-        minutes:    input.minutes,
-        topic:      input.topic ?? null,
-        notes:      input.notes ?? null,
+        entry_date: v.entry_date,
+        kind:       v.kind,
+        minutes:    v.minutes,
+        topic:      v.topic ?? null,
+        notes:      v.notes ?? null,
       })
       .select()
       .single();
@@ -42,7 +47,6 @@ export async function createStudySession(input: CreateStudyInput) {
 
     updateTag(userTag(userId, "study"));
     recomputeGoals().catch((e) => console.error("recomputeGoals (study):", e));
-    revalidatePath("/", "layout");
     return { success: true as const, data: data as unknown as StudySessionRow };
   } catch (err) {
     console.error("createStudySession error:", err);
@@ -54,9 +58,9 @@ export async function getStudySessions(): Promise<StudySessionRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
+  const supabase = createAdminClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
-      const supabase = createAdminClient();
       const { data, error } = await supabase
         .from("study_sessions")
         .select("*")
@@ -88,6 +92,5 @@ export async function deleteStudySession(id: string) {
   if (error) return { success: false as const, error: error.message };
 
   updateTag(userTag(userId, "study"));
-  revalidatePath("/", "layout");
   return { success: true as const };
 }

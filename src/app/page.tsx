@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { Piece, type PieceType } from "@/components/shared/piece";
+
 // ─────────────────────────────────────────────────────────────
 //  PAWN TO QUEEN — LANDING PAGE (Page 1)
 //  Luxury editorial × Vintage chess manuscript × Hermès
@@ -103,12 +105,7 @@ function TopNav() {
     <header className="sticky top-0 z-50 bg-ivory/85 backdrop-blur-md border-b border-gold/25">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-6 lg:px-10 h-16">
         <Link href="/" className="flex items-center gap-2.5 group">
-          <span
-            className="font-display text-2xl text-emerald leading-none"
-            aria-hidden="true"
-          >
-            {PIECES.queen}
-          </span>
+          <Piece type="queen" color="green" size={26} className="w-6 h-6 shrink-0" priority />
           <span className="font-display tracking-wide text-[15px] text-ink">
             Pawn <span className="text-gold-deep">to</span> Queen
           </span>
@@ -163,13 +160,7 @@ function Hero() {
         {/* LEFT — vintage pawn */}
         <div className="hidden lg:flex lg:col-span-2 justify-center">
           <div className="relative">
-            <div
-              className="font-display text-ink/80 leading-none select-none"
-              style={{ fontSize: "13rem" }}
-              aria-hidden="true"
-            >
-              {PIECES.pawn}
-            </div>
+            <Piece type="pawn" color="gold" size={208} className="w-40 h-48 drop-shadow-sm" />
             <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-20 h-px bg-gold-deep/40" />
           </div>
         </div>
@@ -237,13 +228,13 @@ function Hero() {
               className="absolute inset-0 blur-3xl bg-gold/30 rounded-full"
               aria-hidden="true"
             />
-            <div
-              className="relative font-display text-emerald leading-none select-none drop-shadow-sm"
-              style={{ fontSize: "20rem" }}
-              aria-hidden="true"
-            >
-              {PIECES.queen}
-            </div>
+            <Piece
+              type="queen"
+              color="green"
+              size={320}
+              className="relative w-64 h-72 md:w-72 md:h-80 drop-shadow-sm"
+              priority
+            />
             <Crown className="absolute -top-6 left-1/2 -translate-x-1/2 w-14 h-10 text-gold-deep" />
             <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-32 h-px bg-gold-deep/50" />
           </div>
@@ -295,12 +286,12 @@ function QuoteBand() {
 //  How It Works — Pawn → Queen journey
 // ─────────────────────────────────────────────────────────────
 
-const JOURNEY = [
-  { piece: PIECES.pawn, name: "Pawn", note: "Begin" },
-  { piece: PIECES.knight, name: "Knight", note: "Learn" },
-  { piece: PIECES.bishop, name: "Bishop", note: "Refine" },
-  { piece: PIECES.rook, name: "Rook", note: "Master" },
-  { piece: PIECES.queen, name: "Queen", note: "Reign" },
+const JOURNEY: { piece: PieceType; name: string; note: string }[] = [
+  { piece: "pawn", name: "Pawn", note: "Begin" },
+  { piece: "knight", name: "Knight", note: "Learn" },
+  { piece: "bishop", name: "Bishop", note: "Refine" },
+  { piece: "rook", name: "Rook", note: "Master" },
+  { piece: "queen", name: "Queen", note: "Reign" },
 ];
 
 function HowItWorks() {
@@ -334,12 +325,13 @@ function HowItWorks() {
               >
                 <div className="relative">
                   <div className="size-[7.5rem] md:size-[8.5rem] rounded-full bg-ivory border border-gold/60 flex items-center justify-center shadow-[0_0_0_6px_rgba(250,248,242,1),0_0_0_7px_rgba(230,196,106,0.3)] group-hover:border-emerald transition-colors">
-                    <span
-                      className="font-display text-7xl text-ink group-hover:text-emerald transition-colors leading-none"
-                      aria-hidden="true"
-                    >
-                      {step.piece}
-                    </span>
+                    <Piece
+                      type={step.piece}
+                      color={i % 2 === 0 ? "gold" : "green"}
+                      size={72}
+                      className="animate-piece-light"
+                      style={{ animationDelay: `${i}s` }}
+                    />
                   </div>
                   <span className="absolute -top-2 -right-2 bg-emerald text-ivory size-7 rounded-full flex items-center justify-center text-xs font-serif-quote font-semibold">
                     {i + 1}

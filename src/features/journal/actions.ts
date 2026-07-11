@@ -1,10 +1,11 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath, unstable_cache, updateTag } from "next/cache";
+import { updateTag, unstable_cache } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
 import { userTag } from "@/lib/cache-tags";
+import { journalSchema, firstIssue } from "@/lib/validation";
 import type { JournalRow, JournalKind, JournalMood } from "@/types/database";
 
 // ─────────────────────────────────────────────────────────────
@@ -23,24 +24,27 @@ export async function createJournalEntry(input: CreateJournalInput) {
   const { userId } = await auth();
   if (!userId) return { success: false as const, error: "Not signed in." };
 
+  const parsed = journalSchema.safeParse(input);
+  if (!parsed.success) return { success: false as const, error: firstIssue(parsed.error) };
+  const v = parsed.data;
+
   try {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("journal")
       .insert({
         user_id:    userId,
-        entry_date: input.entry_date,
-        kind:       input.kind,
-        title:      input.title ?? null,
-        body:       input.body,
-        mood:       input.mood ?? null,
+        entry_date: v.entry_date,
+        kind:       v.kind,
+        title:      v.title ?? null,
+        body:       v.body,
+        mood:       v.mood ?? null,
       })
       .select()
       .single();
     if (error) return { success: false as const, error: error.message };
 
     updateTag(userTag(userId, "journal"));
-    revalidatePath("/", "layout");
     return { success: true as const, data: data as unknown as JournalRow };
   } catch (err) {
     console.error("createJournalEntry error:", err);
@@ -52,9 +56,9 @@ export async function getJournalEntries(): Promise<JournalRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
+  const supabase = createAdminClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
-      const supabase = createAdminClient();
       const { data, error } = await supabase
         .from("journal")
         .select("*")
@@ -86,6 +90,5 @@ export async function deleteJournalEntry(id: string) {
   if (error) return { success: false as const, error: error.message };
 
   updateTag(userTag(userId, "journal"));
-  revalidatePath("/", "layout");
   return { success: true as const };
 }

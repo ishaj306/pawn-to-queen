@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath, unstable_cache, updateTag } from "next/cache";
+import { updateTag, unstable_cache } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
 import { userTag } from "@/lib/cache-tags";
@@ -19,9 +19,9 @@ export async function getAchievements(): Promise<AchievementRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
+  const supabase = createAdminClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
-      const supabase = createAdminClient();
       const { data, error } = await supabase
         .from("achievements")
         .select("*")
@@ -54,7 +54,6 @@ export async function unlockAchievement(key: string) {
   }
 
   updateTag(userTag(userId, "achievements"));
-  revalidatePath("/", "layout");
   return { success: true as const };
 }
 
@@ -80,6 +79,5 @@ export async function unlockMany(keys: string[]) {
   const { error } = await supabase.from("achievements").insert(rows);
   if (error) return { success: false as const, error: error.message };
 
-  revalidatePath("/", "layout");
   return { success: true as const, unlocked: fresh.length };
 }

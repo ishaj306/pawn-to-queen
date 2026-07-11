@@ -1,10 +1,11 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath, unstable_cache, updateTag } from "next/cache";
+import { updateTag, unstable_cache } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
 import { userTag } from "@/lib/cache-tags";
+import { gameSchema, firstIssue } from "@/lib/validation";
 import { recomputeGoals } from "@/features/goals/actions";
 import type {
   GameRow,
@@ -37,25 +38,29 @@ export async function createGame(input: CreateGameInput) {
   const { userId } = await auth();
   if (!userId) return { success: false as const, error: "Not signed in." };
 
+  const parsed = gameSchema.safeParse(input);
+  if (!parsed.success) return { success: false as const, error: firstIssue(parsed.error) };
+  const v = parsed.data;
+
   try {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("games")
       .insert({
         user_id:      userId,
-        opponent:     input.opponent,
-        played_at:    input.played_at,
-        platform:     input.platform,
-        result:       input.result,
-        opening:      input.opening,
-        format:       input.format,
-        accuracy:     input.accuracy ?? null,
-        time_control: input.time_control ?? null,
-        blunders:     input.blunders ?? 0,
-        mistakes:     input.mistakes ?? 0,
-        brilliant:    input.brilliant ?? 0,
-        missed_wins:  input.missed_wins ?? 0,
-        notes:        input.notes ?? null,
+        opponent:     v.opponent,
+        played_at:    v.played_at,
+        platform:     v.platform,
+        result:       v.result,
+        opening:      v.opening,
+        format:       v.format,
+        accuracy:     v.accuracy ?? null,
+        time_control: v.time_control ?? null,
+        blunders:     v.blunders ?? 0,
+        mistakes:     v.mistakes ?? 0,
+        brilliant:    v.brilliant ?? 0,
+        missed_wins:  v.missed_wins ?? 0,
+        notes:        v.notes ?? null,
       })
       .select()
       .single();
@@ -64,7 +69,6 @@ export async function createGame(input: CreateGameInput) {
 
     updateTag(userTag(userId, "games"));
     recomputeGoals().catch((e) => console.error("recomputeGoals (game):", e));
-    revalidatePath("/", "layout");
     return { success: true as const, data: data as unknown as GameRow };
   } catch (err) {
     console.error("createGame error:", err);
@@ -76,10 +80,10 @@ export async function getGames(): Promise<GameRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
+  const supabase = createAdminClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
       try {
-        const supabase = createAdminClient();
         const { data, error } = await supabase
           .from("games")
           .select("*")
@@ -117,7 +121,6 @@ export async function deleteGame(id: string) {
     if (error) return { success: false as const, error: error.message };
 
     updateTag(userTag(userId, "games"));
-    revalidatePath("/", "layout");
     return { success: true as const };
   } catch (err) {
     console.error("deleteGame error:", err);

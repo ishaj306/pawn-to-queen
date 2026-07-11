@@ -1,12 +1,14 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath, unstable_cache, updateTag } from "next/cache";
+import { updateTag, unstable_cache } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createAdminClient } from "@/supabase/admin";
 import { userTag } from "@/lib/cache-tags";
+import { ratingEntrySchema, firstIssue } from "@/lib/validation";
 import { recomputeGoals } from "@/features/goals/actions";
-import type { RatingFormat } from "@/types/database";
+import type { RatingFormat, FormatRatings } from "@/types/database";
 
 // ─────────────────────────────────────────────────────────────
 //  Rating entries — server actions (Clerk + service-role)
@@ -31,11 +33,83 @@ function configError() {
   };
 }
 
+// Recompute per-format current/peak from the source rating_entries rows,
+// then mirror the user's PRIMARY format into the headline current_rating /
+// peak_rating. Authoritative — safe for back-dated entries and deletes,
+// and a Blitz entry never clobbers a Rapid headline. Called after every
+// rating write/delete.
+async function syncFormatRatings(supabase: SupabaseClient, userId: string) {
+  const { data } = await supabase
+    .from("rating_entries")
+    .select("rating, format, entry_date, created_at")
+    .eq("user_id", userId)
+    .order("entry_date", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  const rows = (data ?? []) as {
+    rating: number;
+    format: RatingFormat;
+  }[];
+
+  // Fold ascending rows → last-seen per format is the latest = "current".
+  const byFormat: FormatRatings = {};
+  for (const r of rows) {
+    const slot = byFormat[r.format];
+    if (!slot) byFormat[r.format] = { current: r.rating, peak: r.rating };
+    else {
+      slot.current = r.rating;
+      slot.peak = Math.max(slot.peak, r.rating);
+    }
+  }
+
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("primary_format")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const primary = ((prof?.primary_format as RatingFormat) ?? "Rapid");
+
+  // Headline follows the primary format; fall back to the overall latest
+  // when the user has no entries in their primary format yet.
+  const headline =
+    byFormat[primary] ??
+    (rows.length
+      ? {
+          current: rows[rows.length - 1].rating,
+          peak: Math.max(...rows.map((r) => r.rating)),
+        }
+      : { current: 800, peak: 800 });
+
+  await supabase
+    .from("profiles")
+    .update({
+      format_ratings: byFormat,
+      current_rating: headline.current,
+      peak_rating: headline.peak,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId);
+}
+
+// Public wrapper so other server actions (e.g. the importer) can refresh
+// the profile's per-format + headline ratings after writing rating rows.
+export async function recomputeFormatRatings() {
+  const { userId } = await auth();
+  if (!userId) return;
+  const supabase = createAdminClient();
+  await syncFormatRatings(supabase, userId);
+  updateTag(userTag(userId, "profile"));
+}
+
 export async function createRatingEntry(input: RatingEntryInput) {
   const { userId } = await auth();
   if (!userId) {
     return { success: false as const, error: "Not signed in." };
   }
+
+  const parsed = ratingEntrySchema.safeParse(input);
+  if (!parsed.success) return { success: false as const, error: firstIssue(parsed.error) };
+  const v = parsed.data;
 
   try {
     const supabase = createAdminClient();
@@ -44,14 +118,14 @@ export async function createRatingEntry(input: RatingEntryInput) {
       .from("rating_entries")
       .insert({
         user_id:           userId,
-        rating:            input.rating,
-        format:            input.format ?? "Rapid",
-        entry_date:        input.entry_date,
-        notes:             input.notes || null,
-        game_result:       input.game_result || null,
-        mistake_category:  input.mistake_category || null,
-        mindset:           input.mindset || null,
-        takeaway:          input.takeaway || null,
+        rating:            v.rating,
+        format:            v.format ?? "Rapid",
+        entry_date:        v.entry_date,
+        notes:             v.notes || null,
+        game_result:       v.game_result || null,
+        mistake_category:  v.mistake_category || null,
+        mindset:           v.mindset || null,
+        takeaway:          v.takeaway || null,
         is_starred:        false,
       })
       .select()
@@ -61,31 +135,14 @@ export async function createRatingEntry(input: RatingEntryInput) {
       return { success: false as const, error: insertError.message };
     }
 
-    // Update profile's current and peak rating
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("peak_rating")
-      .eq("user_id", userId)
-      .single();
-
-    const newPeak = profile?.peak_rating
-      ? Math.max(profile.peak_rating as number, input.rating)
-      : input.rating;
-
-    await supabase
-      .from("profiles")
-      .update({
-        current_rating: input.rating,
-        peak_rating:    newPeak,
-        updated_at:     new Date().toISOString(),
-      })
-      .eq("user_id", userId);
+    // Recompute per-format current/peak (+ the primary-format headline)
+    // from the DB so cross-format tracking and back-dated entries stay correct.
+    await syncFormatRatings(supabase, userId);
 
     updateTag(userTag(userId, "ratings"));
     updateTag(userTag(userId, "profile"));
     // Bump any rating-tracked goals
     recomputeGoals().catch((e) => console.error("recomputeGoals (rating):", e));
-    revalidatePath("/", "layout");
     return { success: true as const, data: newEntry };
   } catch (err: unknown) {
     console.error("Create entry error:", err);
@@ -97,10 +154,10 @@ export async function getRatingEntries() {
   const { userId } = await auth();
   if (!userId) return [];
 
+  const supabase = createAdminClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
       try {
-        const supabase = createAdminClient();
         const { data, error } = await supabase
           .from("rating_entries")
           .select("*")
@@ -142,7 +199,6 @@ export async function toggleStarEntry(id: string, isStarred: boolean) {
     if (error) return { success: false as const, error: error.message };
 
     updateTag(userTag(userId, "ratings"));
-    revalidatePath("/", "layout");
     return { success: true as const };
   } catch (err) {
     console.error("Toggle star error:", err);
@@ -167,33 +223,11 @@ export async function deleteRatingEntry(id: string) {
 
     if (error) return { success: false as const, error: error.message };
 
-    // Recalculate current and peak ratings from remaining entries
-    const { data: remaining } = await supabase
-      .from("rating_entries")
-      .select("rating")
-      .eq("user_id", userId)
-      .order("entry_date", { ascending: true });
-
-    let currentRating = 800;
-    let peakRating = 800;
-    if (remaining && remaining.length > 0) {
-      const ratings = (remaining as { rating: number }[]).map((r) => r.rating);
-      currentRating = ratings[ratings.length - 1];
-      peakRating = Math.max(...ratings);
-    }
-
-    await supabase
-      .from("profiles")
-      .update({
-        current_rating: currentRating,
-        peak_rating:    peakRating,
-        updated_at:     new Date().toISOString(),
-      })
-      .eq("user_id", userId);
+    // Recompute per-format current/peak from the remaining entries.
+    await syncFormatRatings(supabase, userId);
 
     updateTag(userTag(userId, "ratings"));
     updateTag(userTag(userId, "profile"));
-    revalidatePath("/", "layout");
     return { success: true as const };
   } catch (err) {
     console.error("Delete rating entry error:", err);

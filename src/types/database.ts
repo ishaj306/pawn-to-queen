@@ -14,6 +14,11 @@ export type JournalKind  = "lesson" | "mistake" | "tournament" | "thought" | "da
 export type JournalMood  = "focused" | "tired" | "excited" | "frustrated" | "calm" | "curious";
 export type StudyKind    = "video" | "book" | "opening" | "endgame" | "tactics" | "game_review";
 
+// Per-format current/peak snapshot, stored in profiles.format_ratings.
+export type FormatRatings = Partial<
+  Record<RatingFormat, { current: number; peak: number }>
+>;
+
 // ─── profiles ───────────────────────────────────────────────────
 
 export interface ProfileRow {
@@ -23,6 +28,8 @@ export interface ProfileRow {
   current_rating:       number;
   peak_rating:          number;
   target_rating:        number;
+  primary_format:       RatingFormat;
+  format_ratings:       FormatRatings;
   chess_com_username:   string | null;
   lichess_username:     string | null;
   bio:                  string | null;
@@ -74,6 +81,8 @@ export interface GameRow {
   brilliant:     number;
   missed_wins:   number;
   notes:         string | null;
+  source:        string | null;       // 'chess.com' | 'lichess' | null (manual)
+  external_id:   string | null;       // platform game id/url, for dedup
   created_at:    string;
 }
 export type GameInsert =
