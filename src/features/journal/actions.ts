@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { updateTag, unstable_cache } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
+import { createReadClient } from "@/supabase/read";
 import { userTag } from "@/lib/cache-tags";
 import { journalSchema, firstIssue } from "@/lib/validation";
 import type { JournalRow, JournalKind, JournalMood } from "@/types/database";
@@ -45,7 +46,7 @@ export async function createJournalEntry(input: CreateJournalInput) {
     if (error) return { success: false as const, error: error.message };
 
     updateTag(userTag(userId, "journal"));
-    return { success: true as const, data: data as unknown as JournalRow };
+    return { success: true as const, data };
   } catch (err) {
     console.error("createJournalEntry error:", err);
     return { success: false as const, error: "Could not save entry." };
@@ -56,7 +57,7 @@ export async function getJournalEntries(): Promise<JournalRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
-  const supabase = createAdminClient();
+  const supabase = await createReadClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
       const { data, error } = await supabase
@@ -69,7 +70,7 @@ export async function getJournalEntries(): Promise<JournalRow[]> {
         console.error("getJournalEntries error:", error.message);
         return [];
       }
-      return (data ?? []) as unknown as JournalRow[];
+      return data ?? [];
     },
     ["journal", userId],
     { tags: [userTag(userId, "journal")], revalidate: 60 },

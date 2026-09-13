@@ -95,8 +95,8 @@ export function AddRatingModal({
       } else {
         setErrorMsg(res.error || "Could not save your entry.");
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || "An unexpected error occurred.");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "An unexpected error occurred.");
     } finally {
       setSubmitting(false);
     }

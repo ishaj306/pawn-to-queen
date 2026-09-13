@@ -95,7 +95,7 @@ export function LogStudyModal({
             </DialogPrimitive.Close>
 
             <div className="text-center mb-6">
-              <p className="font-serif-quote italic text-gold-deep tracking-[0.32em] uppercase text-[11px] mb-2">Today's Study</p>
+              <p className="font-serif-quote italic text-gold-deep tracking-[0.32em] uppercase text-[11px] mb-2">Today&apos;s Study</p>
               <DialogPrimitive.Title className="font-display text-2xl md:text-[1.6rem] text-ink leading-tight">
                 Log a study session
               </DialogPrimitive.Title>

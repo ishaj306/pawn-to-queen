@@ -19,9 +19,28 @@ export type FormatRatings = Partial<
   Record<RatingFormat, { current: number; peak: number }>
 >;
 
+// ─── Insert-shape helper ────────────────────────────────────────
+//  Derives a table's Insert type from its Row, mirroring how
+//  `supabase gen types` treats columns:
+//   - `Generated` columns (id, created_at, …) are dropped entirely.
+//   - `Defaulted` columns (DB DEFAULT, e.g. counters) are optional.
+//   - Any nullable column (`… | null`) is optional.
+//   - Everything else is required.
+
+type NullableKeys<T> = {
+  [K in keyof T]-?: null extends T[K] ? K : never;
+}[keyof T];
+
+type Insertable<
+  Row,
+  Generated extends keyof Row = never,
+  Defaulted extends keyof Row = never,
+> = Omit<Row, Generated | Defaulted | NullableKeys<Row>> &
+  Partial<Pick<Row, Exclude<Defaulted | NullableKeys<Row>, Generated>>>;
+
 // ─── profiles ───────────────────────────────────────────────────
 
-export interface ProfileRow {
+export type ProfileRow = {
   user_id:              string;
   full_name:            string | null;
   username:             string | null;
@@ -44,7 +63,7 @@ export type ProfileUpdate = Partial<Omit<ProfileRow, "user_id" | "created_at">>;
 
 // ─── rating_entries ─────────────────────────────────────────────
 
-export interface RatingEntryRow {
+export type RatingEntryRow = {
   id:                string;
   user_id:           string;
   rating:            number;
@@ -59,13 +78,12 @@ export interface RatingEntryRow {
   created_at:        string;
 }
 export type RatingEntryInsert =
-  Omit<RatingEntryRow, "id" | "created_at" | "is_starred"> &
-  Partial<Pick<RatingEntryRow, "is_starred">>;
+  Insertable<RatingEntryRow, "id" | "created_at", "is_starred">;
 export type RatingEntryUpdate = Partial<Omit<RatingEntryRow, "id" | "user_id" | "created_at">>;
 
 // ─── games ──────────────────────────────────────────────────────
 
-export interface GameRow {
+export type GameRow = {
   id:            string;
   user_id:       string;
   opponent:      string;
@@ -86,13 +104,12 @@ export interface GameRow {
   created_at:    string;
 }
 export type GameInsert =
-  Omit<GameRow, "id" | "created_at" | "blunders" | "mistakes" | "brilliant" | "missed_wins"> &
-  Partial<Pick<GameRow, "blunders" | "mistakes" | "brilliant" | "missed_wins">>;
+  Insertable<GameRow, "id" | "created_at", "blunders" | "mistakes" | "brilliant" | "missed_wins">;
 export type GameUpdate = Partial<Omit<GameRow, "id" | "user_id" | "created_at">>;
 
 // ─── puzzles ────────────────────────────────────────────────────
 
-export interface PuzzleRow {
+export type PuzzleRow = {
   id:             string;
   user_id:        string;
   session_date:   string;        // YYYY-MM-DD
@@ -103,12 +120,12 @@ export interface PuzzleRow {
   notes:          string | null;
   created_at:     string;
 }
-export type PuzzleInsert = Omit<PuzzleRow, "id" | "created_at">;
+export type PuzzleInsert = Insertable<PuzzleRow, "id" | "created_at">;
 export type PuzzleUpdate = Partial<Omit<PuzzleRow, "id" | "user_id" | "created_at">>;
 
 // ─── goals ──────────────────────────────────────────────────────
 
-export interface GoalRow {
+export type GoalRow = {
   id:             string;
   user_id:        string;
   title:          string;
@@ -121,13 +138,12 @@ export interface GoalRow {
   created_at:     string;
 }
 export type GoalInsert =
-  Omit<GoalRow, "id" | "created_at" | "current_value" | "completed_at"> &
-  Partial<Pick<GoalRow, "current_value" | "completed_at">>;
+  Insertable<GoalRow, "id" | "created_at", "current_value">;
 export type GoalUpdate = Partial<Omit<GoalRow, "id" | "user_id" | "created_at">>;
 
 // ─── journal ────────────────────────────────────────────────────
 
-export interface JournalRow {
+export type JournalRow = {
   id:          string;
   user_id:     string;
   entry_date:  string;          // YYYY-MM-DD
@@ -137,12 +153,12 @@ export interface JournalRow {
   mood:        JournalMood | null;
   created_at:  string;
 }
-export type JournalInsert = Omit<JournalRow, "id" | "created_at">;
+export type JournalInsert = Insertable<JournalRow, "id" | "created_at">;
 export type JournalUpdate = Partial<Omit<JournalRow, "id" | "user_id" | "created_at">>;
 
 // ─── study_sessions ─────────────────────────────────────────────
 
-export interface StudySessionRow {
+export type StudySessionRow = {
   id:          string;
   user_id:     string;
   entry_date:  string;          // YYYY-MM-DD
@@ -152,12 +168,12 @@ export interface StudySessionRow {
   notes:       string | null;
   created_at:  string;
 }
-export type StudySessionInsert = Omit<StudySessionRow, "id" | "created_at">;
+export type StudySessionInsert = Insertable<StudySessionRow, "id" | "created_at">;
 export type StudySessionUpdate = Partial<Omit<StudySessionRow, "id" | "user_id" | "created_at">>;
 
 // ─── achievements ───────────────────────────────────────────────
 
-export interface AchievementRow {
+export type AchievementRow = {
   id:           string;
   user_id:      string;
   key:          string;
@@ -194,7 +210,20 @@ export type Database = {
       achievements:    { Row: AchievementRow;    Insert: AchievementInsert;    Update: Partial<AchievementRow>; Relationships: [] };
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      // Declared in supabase/migrations/0004_daily_aggregates.sql.
+      get_user_daily_aggregates: {
+        Args: { p_user_id: string; p_start_date: string; p_end_date: string };
+        Returns: {
+          day:           string;
+          games_count:   number;
+          puzzles_count: number;
+          study_minutes: number;
+          journal_count: number;
+          last_rating:   number | null;
+        }[];
+      };
+    };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

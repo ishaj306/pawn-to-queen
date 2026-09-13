@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { updateTag, unstable_cache } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
+import { createReadClient } from "@/supabase/read";
 import { userTag } from "@/lib/cache-tags";
 import { studySchema, firstIssue } from "@/lib/validation";
 import { recomputeGoals } from "@/features/goals/actions";
@@ -47,7 +48,7 @@ export async function createStudySession(input: CreateStudyInput) {
 
     updateTag(userTag(userId, "study"));
     recomputeGoals().catch((e) => console.error("recomputeGoals (study):", e));
-    return { success: true as const, data: data as unknown as StudySessionRow };
+    return { success: true as const, data };
   } catch (err) {
     console.error("createStudySession error:", err);
     return { success: false as const, error: "Could not save study session." };
@@ -58,7 +59,7 @@ export async function getStudySessions(): Promise<StudySessionRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
-  const supabase = createAdminClient();
+  const supabase = await createReadClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
       const { data, error } = await supabase
@@ -71,7 +72,7 @@ export async function getStudySessions(): Promise<StudySessionRow[]> {
         console.error("getStudySessions error:", error.message);
         return [];
       }
-      return (data ?? []) as unknown as StudySessionRow[];
+      return data ?? [];
     },
     ["study_sessions", userId],
     { tags: [userTag(userId, "study")], revalidate: 60 },

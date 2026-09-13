@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { updateTag, unstable_cache } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
+import { createReadClient } from "@/supabase/read";
 import { userTag } from "@/lib/cache-tags";
 import { profileSchema, firstIssue } from "@/lib/validation";
 import type { ProfileRow, RatingFormat } from "@/types/database";
@@ -28,7 +29,7 @@ export async function getProfile(): Promise<ProfileRow | null> {
   const { userId } = await auth();
   if (!userId) return null;
 
-  const supabase = createAdminClient();
+  const supabase = await createReadClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
       const { data } = await supabase
@@ -64,7 +65,7 @@ export async function updateProfile(input: UpdateProfileInput) {
     if (error) return { success: false as const, error: error.message };
 
     updateTag(userTag(userId, "profile"));
-    return { success: true as const, data: data as unknown as ProfileRow };
+    return { success: true as const, data };
   } catch (err) {
     console.error("updateProfile error:", err);
     return { success: false as const, error: "Could not save profile." };

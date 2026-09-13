@@ -13,9 +13,11 @@ import { computeChessStats, type ChessStats } from "@/lib/chess-stats";
 //  own numbers or falls back to sample data.
 // ─────────────────────────────────────────────────────────────
 
-export function useChessData() {
-  const [data, setData] = useState<ChessData | null>(null);
-  const [loading, setLoading] = useState(true);
+export function useChessData(initialData?: ChessData) {
+  // When a server component seeds initialData, we render with it on first
+  // paint and skip the mount fetch — refresh() still re-pulls after a Sync.
+  const [data, setData] = useState<ChessData | null>(initialData ?? null);
+  const [loading, setLoading] = useState(!initialData);
 
   const refresh = useCallback(async () => {
     const d = await getChessData();
@@ -23,6 +25,7 @@ export function useChessData() {
   }, []);
 
   useEffect(() => {
+    if (initialData) return; // already seeded from the server
     let cancelled = false;
     (async () => {
       try {
@@ -35,7 +38,7 @@ export function useChessData() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [initialData]);
 
   const stats: ChessStats = useMemo(
     () =>

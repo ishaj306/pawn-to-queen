@@ -2,6 +2,8 @@ import "server-only";
 import { auth } from "@clerk/nextjs/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import type { Database } from "@/types/database";
+
 // ─────────────────────────────────────────────────────────────────
 //  User-context Supabase client.
 //
@@ -25,7 +27,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 //  Server-only — the `server-only` import blocks accidental client use.
 // ─────────────────────────────────────────────────────────────────
 
-export async function createUserClient(): Promise<SupabaseClient> {
+export async function createUserClient(): Promise<SupabaseClient<Database>> {
   const { getToken } = await auth();
   const token = await getToken({ template: "supabase" });
 

@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { updateTag, unstable_cache } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
+import { createReadClient } from "@/supabase/read";
 import { userTag } from "@/lib/cache-tags";
 import { puzzleSchema, firstIssue } from "@/lib/validation";
 import { recomputeGoals } from "@/features/goals/actions";
@@ -50,7 +51,7 @@ export async function createPuzzle(input: CreatePuzzleInput) {
 
     updateTag(userTag(userId, "puzzles"));
     recomputeGoals().catch((e) => console.error("recomputeGoals (puzzle):", e));
-    return { success: true as const, data: data as unknown as PuzzleRow };
+    return { success: true as const, data };
   } catch (err) {
     console.error("createPuzzle error:", err);
     return { success: false as const, error: "Could not save the session." };
@@ -61,7 +62,7 @@ export async function getPuzzles(): Promise<PuzzleRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
-  const supabase = createAdminClient();
+  const supabase = await createReadClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
       try {
@@ -75,7 +76,7 @@ export async function getPuzzles(): Promise<PuzzleRow[]> {
           console.error("getPuzzles error:", error.message);
           return [];
         }
-        return (data ?? []) as unknown as PuzzleRow[];
+        return data ?? [];
       } catch (err) {
         console.error("getPuzzles exception:", err);
         return [];

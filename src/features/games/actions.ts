@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { updateTag, unstable_cache } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
+import { createReadClient } from "@/supabase/read";
 import { userTag } from "@/lib/cache-tags";
 import { gameSchema, firstIssue } from "@/lib/validation";
 import { recomputeGoals } from "@/features/goals/actions";
@@ -69,7 +70,7 @@ export async function createGame(input: CreateGameInput) {
 
     updateTag(userTag(userId, "games"));
     recomputeGoals().catch((e) => console.error("recomputeGoals (game):", e));
-    return { success: true as const, data: data as unknown as GameRow };
+    return { success: true as const, data };
   } catch (err) {
     console.error("createGame error:", err);
     return { success: false as const, error: "Could not save the game." };
@@ -80,7 +81,7 @@ export async function getGames(): Promise<GameRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
-  const supabase = createAdminClient();
+  const supabase = await createReadClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
       try {
@@ -94,7 +95,7 @@ export async function getGames(): Promise<GameRow[]> {
           console.error("getGames error:", error.message);
           return [];
         }
-        return (data ?? []) as unknown as GameRow[];
+        return data ?? [];
       } catch (err) {
         console.error("getGames exception:", err);
         return [];

@@ -5,10 +5,11 @@ import { updateTag, unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createAdminClient } from "@/supabase/admin";
+import { createReadClient } from "@/supabase/read";
 import { userTag } from "@/lib/cache-tags";
 import { ratingEntrySchema, firstIssue } from "@/lib/validation";
 import { recomputeGoals } from "@/features/goals/actions";
-import type { RatingFormat, FormatRatings } from "@/types/database";
+import type { RatingFormat, FormatRatings, Database } from "@/types/database";
 
 // ─────────────────────────────────────────────────────────────
 //  Rating entries — server actions (Clerk + service-role)
@@ -38,7 +39,7 @@ function configError() {
 // peak_rating. Authoritative — safe for back-dated entries and deletes,
 // and a Blitz entry never clobbers a Rapid headline. Called after every
 // rating write/delete.
-async function syncFormatRatings(supabase: SupabaseClient, userId: string) {
+async function syncFormatRatings(supabase: SupabaseClient<Database>, userId: string) {
   const { data } = await supabase
     .from("rating_entries")
     .select("rating, format, entry_date, created_at")
@@ -154,7 +155,7 @@ export async function getRatingEntries() {
   const { userId } = await auth();
   if (!userId) return [];
 
-  const supabase = createAdminClient();
+  const supabase = await createReadClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
       try {

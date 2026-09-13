@@ -1,24 +1,24 @@
 import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import type { Database } from "@/types/database";
+
 // ─────────────────────────────────────────────────────────────────
 //  Server-only Supabase admin client. Uses the service-role key,
 //  which BYPASSES row-level security. Every server action is
 //  responsible for filtering by the Clerk user ID it gets from
 //  auth() — there is no other gate.
 //
-//  Untyped on purpose for now: Supabase v2.59+ generics are strict
-//  about Database shape and our hand-written types don't quite
-//  satisfy them. We'll swap for `supabase gen types typescript`
-//  output in Phase 5; until then, callers cast to our Row types.
+//  Typed against our hand-written Database schema (src/types/database.ts)
+//  so callers get row/insert typing without `as unknown as` casts.
 //
 //  Never import this from client components. The `server-only`
 //  import will throw a build error if you try.
 // ─────────────────────────────────────────────────────────────────
 
-let cached: SupabaseClient | null = null;
+let cached: SupabaseClient<Database> | null = null;
 
-export function createAdminClient(): SupabaseClient {
+export function createAdminClient(): SupabaseClient<Database> {
   if (cached) return cached;
 
   // The Supabase JS SDK talks to PostgREST over HTTPS — it needs the

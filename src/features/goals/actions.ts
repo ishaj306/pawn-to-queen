@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { updateTag, unstable_cache } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
+import { createReadClient } from "@/supabase/read";
 import { userTag } from "@/lib/cache-tags";
 import { goalSchema, firstIssue } from "@/lib/validation";
 import type { GoalRow, GoalMetric } from "@/types/database";
@@ -46,7 +47,7 @@ export async function createGoal(input: CreateGoalInput) {
     if (error) return { success: false as const, error: error.message };
 
     updateTag(userTag(userId, "goals"));
-    return { success: true as const, data: data as unknown as GoalRow };
+    return { success: true as const, data };
   } catch (err) {
     console.error("createGoal error:", err);
     return { success: false as const, error: "Could not create goal." };
@@ -57,7 +58,7 @@ export async function getGoals(): Promise<GoalRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
-  const supabase = createAdminClient();
+  const supabase = await createReadClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
       const { data, error } = await supabase
@@ -70,7 +71,7 @@ export async function getGoals(): Promise<GoalRow[]> {
         console.error("getGoals error:", error.message);
         return [];
       }
-      return (data ?? []) as unknown as GoalRow[];
+      return data ?? [];
     },
     ["goals", userId],
     { tags: [userTag(userId, "goals")], revalidate: 60 },
@@ -91,11 +92,10 @@ export async function updateGoalProgress(id: string, current_value: number) {
     .single();
   if (!goal) return { success: false as const, error: "Goal not found." };
 
-  const goalRow = goal as unknown as GoalRow;
   const completed_at =
-    current_value >= goalRow.target_value && !goalRow.completed_at
+    current_value >= goal.target_value && !goal.completed_at
       ? new Date().toISOString()
-      : goalRow.completed_at;
+      : goal.completed_at;
 
   const { error } = await supabase
     .from("goals")
@@ -170,21 +170,14 @@ export async function recomputeGoals() {
     .eq("user_id", userId);
 
   const puzzleTotal =
-    (puzzleAgg ?? []).reduce(
-      (a, r) => a + ((r as unknown as { count: number }).count ?? 0),
-      0,
-    ) ?? 0;
+    (puzzleAgg ?? []).reduce((a, r) => a + (r.count ?? 0), 0) ?? 0;
   const gamesTotal = gamesAgg?.length ?? 0;
   const studyTotal =
-    (studyAgg ?? []).reduce(
-      (a, r) => a + ((r as unknown as { minutes: number }).minutes ?? 0),
-      0,
-    ) ?? 0;
-  const currentRating =
-    (latestRating as unknown as { rating?: number } | null)?.rating ?? null;
+    (studyAgg ?? []).reduce((a, r) => a + (r.minutes ?? 0), 0) ?? 0;
+  const currentRating = latestRating?.rating ?? null;
 
   let updated = 0;
-  for (const g of goals as unknown as GoalRow[]) {
+  for (const g of goals ?? []) {
     let next = g.current_value;
     if (g.metric === "rating" && currentRating !== null) next = currentRating;
     else if (g.metric === "puzzles") next = puzzleTotal;

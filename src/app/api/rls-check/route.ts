@@ -13,6 +13,12 @@ import { createUserClient } from "@/supabase/user";
 // ─────────────────────────────────────────────────────────────
 
 export async function GET() {
+  // Diagnostic endpoint — never exposed in production. It reveals
+  // token/RLS internals and is only useful during local setup.
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const { userId, getToken } = await auth();
   if (!userId) {
     return NextResponse.json(

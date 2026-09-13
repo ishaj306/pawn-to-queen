@@ -195,7 +195,7 @@ export default function CalendarPage() {
               The <span className="italic text-emerald">Calendar</span>
             </h1>
             <p className="mt-3 font-serif-quote italic text-lg text-ink/65 max-w-2xl">
-              &ldquo;Show me your calendar and I'll show you your future.&rdquo; A year of practice, every square a day.
+              &ldquo;Show me your calendar and I&apos;ll show you your future.&rdquo; A year of practice, every square a day.
             </p>
           </header>
         </FadeUp>
@@ -288,7 +288,7 @@ export default function CalendarPage() {
             <CornerBrackets />
             {!selectedDay ? (
               <div className="text-center py-6">
-                <p className="font-serif-quote italic text-ink/55">Pick a square above to see that day's record.</p>
+                <p className="font-serif-quote italic text-ink/55">Pick a square above to see that day&apos;s record.</p>
               </div>
             ) : (
               <DayDetail

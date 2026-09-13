@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { updateTag, unstable_cache } from "next/cache";
 
 import { createAdminClient } from "@/supabase/admin";
+import { createReadClient } from "@/supabase/read";
 import { userTag } from "@/lib/cache-tags";
 import type { AchievementRow } from "@/types/database";
 
@@ -19,7 +20,7 @@ export async function getAchievements(): Promise<AchievementRow[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
-  const supabase = createAdminClient();
+  const supabase = await createReadClient();
   const fetcher = unstable_cache(
     async (uid: string) => {
       const { data, error } = await supabase
@@ -31,7 +32,7 @@ export async function getAchievements(): Promise<AchievementRow[]> {
         console.error("getAchievements error:", error.message);
         return [];
       }
-      return (data ?? []) as unknown as AchievementRow[];
+      return data ?? [];
     },
     ["achievements", userId],
     { tags: [userTag(userId, "achievements")], revalidate: 60 },
@@ -69,9 +70,7 @@ export async function unlockMany(keys: string[]) {
     .select("key")
     .eq("user_id", userId)
     .in("key", keys);
-  const have = new Set(
-    (existing ?? []).map((r) => (r as unknown as { key: string }).key),
-  );
+  const have = new Set((existing ?? []).map((r) => r.key));
   const fresh = keys.filter((k) => !have.has(k));
   if (fresh.length === 0) return { success: true as const, unlocked: 0 };
 
